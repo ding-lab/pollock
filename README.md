@@ -45,7 +45,7 @@ expression_matrix
   
 ### Outputs
 
-Output is a .tsv file with the following format: cell_id<tab>cell_prediction
+Output is a .tsv file with cell id and predicted cell type.
   
 Possible cell type predictions:
 * melanoma, plasma, macromononeutro, malignantplasma, tcell, dc, bcell, ductal, stroma, fibroblast, endothelial, mast, acinar

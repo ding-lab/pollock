@@ -4,6 +4,8 @@
 
 A tool for single cell classification
 
+In Development
+
 ### Installation
 ##### Requirements
 * OS:

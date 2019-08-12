@@ -30,7 +30,7 @@ pollock [-h] [--min-confidence-level MIN_CONFIDENCE_LEVEL]
 
 For usage examples see [here](https://github.com/ding-lab/pollock/blob/master/tests/test.py)
 
-Arguments:
+##### Arguments
 
 expression_matrix
   * Tab-seperated single cell expression matrix. Expression values must be raw counts. Rows are Ensembl gene ids, columns are cell id. For an example of how expression matrix must be formatted see [here](https://github.com/ding-lab/pollock/blob/master/tests/data/mini_expression_matrix.tsv).
@@ -45,7 +45,8 @@ expression_matrix
 
 Output is a .tsv file with the following format: cell_id<tab>cell_prediction
   
-For possible cell type predictions see [here](https://github.com/ding-lab/pollock/blob/master/tests/data/mini_expression_matrix.tsv).
+Possible cell type predictions:
+* melanoma, plasma, macromononeutro, malignantplasma, tcell, dc, bcell, ductal, stroma, fibroblast, endothelial, mast, acinar
 
 ### Tests
 

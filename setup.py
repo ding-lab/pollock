@@ -26,14 +26,14 @@ setup(
     packages=find_packages(exclude=['tests']),
     python_requires='>=3.6',
     install_requires=[
-        'joblib==0.13.2',
-        'matplotlib==3.1.1',
-        'numpy==1.17.0',
-        'pandas==0.25.0',
-        'pytest==5.0.1',
-        'seaborn==0.9.0',
-        'scipy==1.3.0',
-        'scikit-learn==0.21.3',
+        'joblib>=0.13.2',
+        'matplotlib>=3.1.1',
+        'numpy>=1.17.0',
+        'pandas>=0.25.0',
+        'pytest>=5.0.1',
+        'seaborn>=0.9.0',
+        'scipy>=1.3.0',
+        'scikit-learn>=0.21.3',
         'tensorflow==2.0.0-beta1'
         ],
 

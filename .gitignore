@@ -2,3 +2,7 @@ notebooks/.ipynb_checkpoints/
 *.egg-info/
 *.pyc
 output.tsv
+.DS_Store
+
+data/
+results/

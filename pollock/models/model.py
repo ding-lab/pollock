@@ -22,12 +22,18 @@ import tensorflow as tf
 
 import pollock.preprocessing.preprocessing as pollock_pp
 
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
 MODEL_PATH = 'model.h5' 
 GENE_TEMPLATE_PATH = 'gene_template.npy' 
-CELL_TYPE_TEMPLATE = 'cell_type_template.npy' 
+CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
 
 def get_row_and_col(location, overall_shape, block_shape):
@@ -68,12 +74,19 @@ def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), si
 
     return block, cell_template
 
+## def get_expression_image(gene_to_expression, template):
+##     gene_img = np.full(template.shape, 0, dtype=int)
+##     for i in range(template.shape[0]):
+##         for j in range(template.shape[1]):
+##             gene_img[i, j] = gene_to_expression.get(template[i, j], 0) + 1
+##     return np.asarray(gene_img)
+
+def get_expression(gene, d):
+    return d.get(gene, 0) + 1
 def get_expression_image(gene_to_expression, template):
-    gene_img = np.full(template.shape, 0, dtype=int)
-    for i in range(template.shape[0]):
-        for j in range(template.shape[1]):
-            gene_img[i, j] = gene_to_expression.get(template[i, j], 0) + 1
-    return np.asarray(gene_img)
+    vf = np.vectorize(get_expression)
+    return vf(template, gene_to_expression)
+    
 
 
 def initialize_directories(cell_types, root=os.path.join(os.getcwd(), 'temp_images'),
@@ -92,43 +105,43 @@ def initialize_directories(cell_types, root=os.path.join(os.getcwd(), 'temp_imag
 
             
 def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join(os.getcwd(), 'temp_images'),
-        purpose='training'):
+        purpose='training', batching_size=1000):
     cell_type_to_fps = {}
-
-##     cell_types = sorted(set(adata.obs[cell_type_key]))
-## 
-##     for cell_type in cell_types:
-##         mask = adata.obs[cell_type_key]==cell_type
-##         cell_adata = adata[mask, :]
-## 
-##         choices = set(random.choices(np.asarray(cell_adata.obs.index), k=n_per_cell_type))
-##         mask = np.asarray([True if c in choices else False for c in cell_adata.obs.index])
-##         cell_adata = cell_adata[mask, :]
     
-    for i in range(adata.shape[0]):
-        if i % 250 == 0: logging.info(f'{i}')
+    logging.info('writing images')
+    is_sparse = 'sparse' in str(type(adata.X))
+    template = np.asarray(template)
+    for b in range(0, adata.shape[0], batching_size):
+        logging.info(f'{b * batching_size} cell images written')
+        print(f'{b * batching_size} cell images written')
+        batching_adata = adata[b:b+batching_size]
 
-        
-        if purpose == 'training':
-            cell_type = adata.obs[cell_type_key][i]
-        else:
-            cell_type = 'unlabeled'
+        X = batching_adata.X
+        if is_sparse:
+            X = X.toarray()
 
-        if cell_type not in cell_type_to_fps:
-            cell_type_to_fps[cell_type] = []
+        for i in range(batching_adata.shape[0]):
+            if purpose == 'training':
+                cell_type = batching_adata.obs[cell_type_key][i]
+            else:
+                cell_type = 'unlabeled'
+    
+            if cell_type not in cell_type_to_fps:
+                cell_type_to_fps[cell_type] = []
+    
+            cell_id = batching_adata.obs.index[i]
 
-        cell_id = adata.obs.index[i]
-        gene_to_expression = {g:e
-                for g, e in zip(adata.var.index, np.asarray(adata.X[i, :].todense()).flatten())}
-        gene_img = get_expression_image(gene_to_expression, template)
-        gene_img = (gene_img / np.max(gene_img)) * 255
-        gene_img = gene_img.astype(np.uint8)
-        gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
-        fp = os.path.join(root, 'all', cell_type, f'{cell_id}.jpg')
-        cell_type_to_fps[cell_type].append(fp)
-
-
-        mpl.image.imsave(fp, gene_img)
+            gene_to_expression = {g:e
+                    for g, e in zip(batching_adata.var.index, X[i, :].flatten())}
+            gene_img = get_expression_image(gene_to_expression, template)
+            gene_img = (gene_img / np.max(gene_img)) * 255
+            gene_img = gene_img.astype(np.uint8)
+            gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
+            fp = os.path.join(root, 'all', cell_type, f'{cell_id}.jpg')
+            cell_type_to_fps[cell_type].append(fp)
+    
+            mpl.image.imsave(fp, gene_img)
+    logging.info('done writing images')
     return cell_type_to_fps
         
 def setup_training(cell_type_to_fps, train_split=.8, n_per_cell_type=200, max_val_per_cell_type=50):
@@ -145,7 +158,6 @@ def setup_training(cell_type_to_fps, train_split=.8, n_per_cell_type=200, max_va
         for fp in validation[:max_val_per_cell_type]:
             shutil.copy(fp, fp.replace(f'/all/{cell_type}/', f'/validation/{cell_type}/'))
     
-
 
 class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', dataset_type='training',
@@ -312,12 +324,12 @@ class PollockDataset(object):
 
 
 
-def load_from_directory(model_filepath, adata, image_root_dir=os.path.join(os.getcwd(), 'prediction'),
+def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.getcwd(), 'prediction'),
         batch_size=64):
     model = tf.keras.models.load_model(os.path.join(model_filepath, MODEL_PATH))
-    gene_template = np.load(os.path.join(model_filepath, GENE_TEMPLATE_PATH))
-    cell_type_template = np.load(os.path.join(model_filepath, CELL_TYPE_TEMPLATE_PATH))
-    cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH))
+    gene_template = np.load(os.path.join(model_filepath, GENE_TEMPLATE_PATH), allow_pickle=True)
+    cell_type_template = np.load(os.path.join(model_filepath, CELL_TYPE_TEMPLATE_PATH), allow_pickle=True)
+    cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
 
     prediction_dataset = PollockDataset(adata, dataset_type='prediction',
            image_root_dir=image_root_dir,
@@ -373,12 +385,16 @@ class PollockModel(object):
         return self.model.predict_generator(pollock_dataset.prediction_ds)
 
     def save(self, pollock_training_dataset, filepath):
+        ## create directory if does not exist
+        if not os.path.isdir(filepath):
+            os.mkdir(filepath)
+
         model_fp = os.path.join(filepath, MODEL_PATH)
         self.model.save(model_fp) 
         np.save(os.path.join(filepath, GENE_TEMPLATE_PATH),
-                pollock_dataset.gene_template)
+                pollock_training_dataset.gene_template)
         np.save(os.path.join(filepath, CELL_TYPE_TEMPLATE_PATH),
-                pollock_dataset.cell_type_template)
+                pollock_training_dataset.cell_type_template)
         np.save(os.path.join(filepath, CELL_TYPES_PATH),
-                np.asarray(pollock_dataset.cell_types))
+                np.asarray(pollock_training_dataset.cell_types))
 

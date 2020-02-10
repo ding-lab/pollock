@@ -33,12 +33,29 @@ def get_expression_df(fp, chunksize=1000):
         cols = df.columns
         index += list(df.index)
 
+    logging.info('begin sparse matrix transpose')
     sparse = sparse.transpose()
+
+    ## try a faster method
+    index = np.asarray(index)
+    logging.info('begin column reordering')
+    sparse = scipy.sparse.csc_matrix(sparse)
+    idxs = np.argsort(index)
+    sparse = sparse[:, idxs]
+    sparse = scipy.sparse.csr_matrix(sparse)
+
     # we reverse index and columns because we did a transpose
-    sparse_df = pd.DataFrame.sparse.from_spmatrix(data=sparse, columns=index, index=cols)
-    sparse_df = sparse_df[list(sorted(sparse_df.columns))]
+    logging.info('begin sparse dataframe construction')
+    #sparse_df = pd.DataFrame.sparse.from_spmatrix(data=sparse, columns=index, index=cols)
+#     sparse_df = pd.DataFrame.sparse.from_spmatrix(data=sparse,
+#             columns=index[idxs], index=cols)
+
+
+    #sparse_df = sparse_df[list(sorted(sparse_df.columns))]
+    #logging.info('end column reordering')
     
-    return sparse_df
+    #return sparse_df
+    return sparse, np.asarray(cols), index[idxs]
 
 def adjust_expression_matrix(input_m, input_genes, model_genes):
     """Adjusts expression matrix so it can be input into model.
@@ -63,12 +80,14 @@ def adjust_expression_matrix(input_m, input_genes, model_genes):
 
 def get_expression_matrix(expression_fp, chunksize=1000):
     logging.info('reading in input expression matrix')
-    df = get_expression_df(expression_fp, chunksize=chunksize)
+    #df = get_expression_df(expression_fp, chunksize=chunksize)
+    input_matrix, input_samples, input_genes = get_expression_df(
+            expression_fp, chunksize=chunksize)
 
-    input_matrix = df.sparse.to_coo().tocsr()
+    #input_matrix = df.sparse.to_coo().tocsr()
     
-    input_genes = np.asarray(df.columns)
-    input_samples = np.asarray(df.index)
+    #input_genes = np.asarray(df.columns)
+    #input_samples = np.asarray(df.index)
     logging.info(f'{len(input_genes)} genes and {len(input_samples)} cells in input expression matrix')
 
     model_genes = np.load(GENE_INDEX)

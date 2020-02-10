@@ -7,3 +7,4 @@ output.tsv
 data/
 results/
 scratch/
+models/

@@ -112,8 +112,7 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
     is_sparse = 'sparse' in str(type(adata.X))
     template = np.asarray(template)
     for b in range(0, adata.shape[0], batching_size):
-        logging.info(f'{b * batching_size} cell images written')
-        print(f'{b * batching_size} cell images written')
+        logging.info(f'{b} cell images written')
         batching_adata = adata[b:b+batching_size]
 
         X = batching_adata.X
@@ -266,12 +265,18 @@ class PollockDataset(object):
 
     def set_image_templates(self, n_genes=100):
         sc.tl.rank_genes_groups(self.adata, self.cell_type_key, method='t-test', n_genes=n_genes)
-        self.gene_template, self.cell_type_template = create_block_image_template(self.adata)
+        self.gene_template, self.cell_type_template = create_block_image_template(self.adata, key=self.cell_type_key)
 
     def get_cell_image(self, cell_id, show=True):
-        gene_to_expression = {g:e
-                for g, e in zip(self.adata.var.index,
-                    np.asarray(self.adata[self.adata.obs.index==cell_id, :].X.todense()).flatten())}
+        if 'sparse' in str(type(self.adata.X)):
+            gene_to_expression = {g:e
+                    for g, e in zip(self.adata.var.index,
+                        np.asarray(self.adata[self.adata.obs.index==cell_id, :].X.todense()).flatten())}
+        else:
+            gene_to_expression = {g:e
+                    for g, e in zip(self.adata.var.index,
+                        np.asarray(self.adata[self.adata.obs.index==cell_id, :].X).flatten())}
+
         gene_img = get_expression_image(gene_to_expression, self.gene_template)
 
         if show:
@@ -281,7 +286,8 @@ class PollockDataset(object):
 
     def write_training_images(self):
         initialize_directories(self.cell_types, root=self.image_root_dir)
-        cell_type_to_fps = write_images(self.adata, self.gene_template, root=self.image_root_dir)
+        cell_type_to_fps = write_images(self.adata, self.gene_template, root=self.image_root_dir,
+                cell_type_key=self.cell_type_key)
         setup_training(cell_type_to_fps, n_per_cell_type=self.n_per_cell_type,
                 max_val_per_cell_type=self.max_val_per_cell_type)
 
@@ -289,7 +295,7 @@ class PollockDataset(object):
         initialize_directories(self.cell_types, root=self.image_root_dir, directories=['all'],
                 purpose=self.dataset_type)
         cell_type_to_fps = write_images(self.adata, self.gene_template, root=self.image_root_dir,
-                purpose=self.dataset_type)
+                purpose=self.dataset_type, cell_type_key=None)
 
     def set_training_datasets(self):
         """"""

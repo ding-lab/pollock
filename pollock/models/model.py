@@ -1,9 +1,11 @@
 import logging
+import json
 import math
 import os
 import random
 import re
 import shutil
+import uuid
 from collections import Counter
 
 import anndata
@@ -16,11 +18,15 @@ import seaborn as sns
 import scipy
 import scanpy as sc
 from PIL import Image
+from sklearn.metrics import classification_report
+
 
 from tensorflow.keras.models import Sequential
 import tensorflow as tf
 
 import pollock.preprocessing.preprocessing as pollock_pp
+import pollock.models.analysis as pollock_analysis
+
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
@@ -32,6 +38,7 @@ MODEL_PATH = 'model.h5'
 GENE_TEMPLATE_PATH = 'gene_template.npy' 
 CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
+MODEL_SUMMARY_PATH = 'summary.json' 
 
 def set_training_devices(devices, jit=False):
     if jit:
@@ -181,7 +188,7 @@ def get_differential_for_grouping(adata, cell_type_key, close_groupings, n_genes
     return grouping_to_differential
 
 
-def initialize_directories(cell_types, root=os.path.join(os.getcwd(), 'temp_images'),
+def initialize_directories(filesafe_cell_types, root=os.path.join(os.getcwd(), 'temp_images'),
         directories=['training', 'validation', 'all'], purpose='training'):
     if os.path.isdir(root):
         shutil.rmtree(root)
@@ -190,13 +197,13 @@ def initialize_directories(cell_types, root=os.path.join(os.getcwd(), 'temp_imag
         os.mkdir(os.path.join(root, x))
 
         if purpose == 'training':
-            for cell_type in sorted(set(cell_types)):
+            for cell_type in sorted(set(filesafe_cell_types)):
                 os.mkdir(os.path.join(root, x, cell_type))
         else:
             os.mkdir(os.path.join(root, x, 'unlabeled'))
 
             
-def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join(os.getcwd(), 'temp_images'),
+def write_images(adata, template, cell_type_to_filesafe, cell_type_key='ClusterName', root=os.path.join(os.getcwd(), 'temp_images'),
         purpose='training', batching_size=1000):
     cell_type_to_fps = {}
     
@@ -221,8 +228,8 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
             else:
                 cell_type = 'unlabeled'
     
-            if cell_type not in cell_type_to_fps:
-                cell_type_to_fps[cell_type] = []
+            if cell_type_to_filesafe[cell_type] not in cell_type_to_fps:
+                cell_type_to_fps[cell_type_to_filesafe[cell_type]] = []
     
 #            logging.info('grab cell id')
             cell_id = batching_adata.obs.index[i]
@@ -240,9 +247,9 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
 #            logging.info('swap axes')
             gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
 #            logging.info('save image')
-            fp = os.path.join(root, 'all', cell_type, f'{cell_id}.jpg')
+            fp = os.path.join(root, 'all', cell_type_to_filesafe[cell_type], f'{cell_id}.jpg')
 #            logging.info('append to fp dict')
-            cell_type_to_fps[cell_type].append(fp)
+            cell_type_to_fps[cell_type_to_filesafe[cell_type]].append(fp)
     
             mpl.image.imsave(fp, gene_img)
     logging.info('done writing images')
@@ -266,26 +273,33 @@ def setup_training(cell_type_to_fps, train_split=.8, n_per_cell_type=200, max_va
 class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', dataset_type='training',
             image_root_dir=os.path.join(os.getcwd(), 'temp_image'), n_per_cell_type=50,
-            max_val_per_cell_type=50, gene_template=None, cell_type_template=None,
+            max_val_per_cell_type=1000, gene_template=None, cell_type_template=None,
             cell_types=None, batch_size=64, nn_threshold=.05):
 
         self.image_root_dir = image_root_dir
         self.adata = adata
-        self.dataset_type=dataset_type
+        self.dataset_type = dataset_type
         self.gene_template = gene_template
         self.cell_type_template = cell_type_template
         self.batch_size = batch_size
         self.cell_types = cell_types
         self.nn_threshold = nn_threshold
+
         if dataset_type == 'prediction':
             self.prediction_ds = None
             self.prediction_length = None
 
             self.set_prediction_dataset()
-            self.cell_ids = [x.split(os.path.sep)[-1].replace('.jpg', '') for x in self.prediction_ds.filenames]
+            self.cell_ids = [x.split(os.path.sep)[-1].replace('.jpg', '') 
+                    for x in self.prediction_ds.filenames]
+##             self.cell_ids = np.asarray(adata.obs.index)
         else:
             self.cell_type_key=cell_type_key
             self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
+            self.cell_type_to_filesafe = {c:str(uuid.uuid4()) for c in self.cell_types}
+            self.filesafe_to_cell_type = {v:k for k, v in self.cell_type_to_filesafe.items()}
+            self.filesafe_cell_types = np.asarray([self.cell_type_to_filesafe[c]
+                    for c in self.cell_types])
             self.n_per_cell_type=n_per_cell_type
             self.max_val_per_cell_type = max_val_per_cell_type
             self.train_ds = None
@@ -299,7 +313,8 @@ class PollockDataset(object):
         # convert the path to a list of path components
         parts = tf.strings.split(file_path, os.path.sep)
         # The second to last is the class-directory
-        return parts[-2] == self.cell_types
+##         return parts[-2] == self.cell_types
+        return parts[-2] == self.filesafe_cell_types
     
     def decode_img(self, img):
         # convert the compressed string to a 3D uint8 tensor
@@ -389,40 +404,24 @@ class PollockDataset(object):
         gene_img = get_expression_image(gene_to_expression, self.gene_template)
         gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
 
-
-
-
-
-##         if 'sparse' in str(type(self.adata.X)):
-##             gene_to_expression = {g:e
-##                     for g, e in zip(self.adata.var.index,
-##                         np.asarray(self.adata[self.adata.obs.index==cell_id, :].X.todense()).flatten())}
-##         else:
-##             gene_to_expression = {g:e
-##                     for g, e in zip(self.adata.var.index,
-##                         np.asarray(self.adata[self.adata.obs.index==cell_id, :].X).flatten())}
-##         gene_to_expression[''] = 0
-##         expression = (X[i] / np.max(X[i])) * 255.
-## 
-##         gene_img = get_expression_image(gene_to_expression, self.gene_template)
-
         if show:
             plt.imshow(gene_img)
 
         return gene_img
 
     def write_training_images(self):
-        initialize_directories(self.cell_types, root=self.image_root_dir)
-        cell_type_to_fps = write_images(self.adata, self.gene_template, root=self.image_root_dir,
-                cell_type_key=self.cell_type_key)
+##         initialize_directories(self.cell_types, root=self.image_root_dir)
+        initialize_directories(self.filesafe_cell_types, root=self.image_root_dir)
+        cell_type_to_fps = write_images(self.adata, self.gene_template, self.cell_type_to_filesafe,
+                root=self.image_root_dir, cell_type_key=self.cell_type_key)
         setup_training(cell_type_to_fps, n_per_cell_type=self.n_per_cell_type,
                 max_val_per_cell_type=self.max_val_per_cell_type)
 
     def write_prediction_images(self):
         initialize_directories(self.cell_types, root=self.image_root_dir, directories=['all'],
                 purpose=self.dataset_type)
-        write_images(self.adata, self.gene_template, root=self.image_root_dir,
-                purpose=self.dataset_type, cell_type_key=None)
+        write_images(self.adata, self.gene_template, {},
+                root=self.image_root_dir, purpose=self.dataset_type, cell_type_key=None)
 
     def set_training_datasets(self):
         """"""
@@ -476,10 +475,16 @@ def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.ge
 
     return prediction_dataset, pollock_model
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 class PollockModel(object):
     def __init__(self, class_names, img_width=128, img_height=128, patience=2, model=None):
         self.callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience)]
+        self.history = None
 
         if model is None:
             self.model = Sequential([
@@ -534,21 +539,18 @@ class PollockModel(object):
 
         self.class_names = class_names
 
-
     def fit(self, pollock_dataset, batch_size=64, epochs=10):
-        history = self.model.fit(pollock_dataset.train_ds,
+        self.history = self.model.fit(pollock_dataset.train_ds,
             epochs=epochs,
             steps_per_epoch=(pollock_dataset.train_length // batch_size) + 1,
             validation_data=pollock_dataset.val_ds,
             validation_steps=(pollock_dataset.val_length // batch_size) + 1,
             callbacks=self.callbacks)
 
-        return history
-
     def predict(self, pollock_dataset):
-        return self.model.predict_generator(pollock_dataset.prediction_ds)
+        return self.model.predict(pollock_dataset.prediction_ds)
 
-    def save(self, pollock_training_dataset, filepath):
+    def save(self, pollock_training_dataset, filepath, X_val=None, y_val=None):
         ## create directory if does not exist
         if not os.path.isdir(filepath):
             os.mkdir(filepath)
@@ -561,4 +563,39 @@ class PollockModel(object):
                 pollock_training_dataset.cell_type_template)
         np.save(os.path.join(filepath, CELL_TYPES_PATH),
                 np.asarray(pollock_training_dataset.cell_types))
+
+        if X_val is not None and y_val is not None:
+            probs = self.model.predict(X_val)
+            predictions = np.argmax(probs, axis=1).flatten()
+            predicted_labels = [self.class_names[i] for i in predictions]
+
+            cell_type_to_index = {v:k for k, v in enumerate(self.class_names)}
+            groundtruth = [cell_type_to_index[cell_type]
+                    for cell_type in y_val]
+
+            report = classification_report(groundtruth, predictions,
+                   target_names=self.class_names, output_dict=True)
+
+            c_df = pollock_analysis.get_confusion_matrix(predictions,
+                    groundtruth, self.class_names,  show=False)
+
+            d = {
+                    'validation': {
+                        'metrics': report,
+                        'probabilities': probs,
+                        'prediction_labels': predicted_labels,
+                        'groundtruth_labels': y_val,
+                        'confusion_matrix': c_df.values,
+                        },
+                    'history': {k:[float(x) for x in v]
+                        for k, v in self.history.history.items()},
+                    }
+            json.dump(d, open(os.path.join(filepath, MODEL_SUMMARY_PATH), 'w'),
+                    cls=NumpyEncoder)
+
+
+
+
+
+
 

@@ -10,6 +10,8 @@ import tf_explain
 import umap
 from tf_explain.core.smoothgrad import SmoothGrad
 from sklearn.decomposition import PCA
+from sklearn.metrics import classification_report
+
 
 def show_history(history):
     """
@@ -36,6 +38,11 @@ def show_history(history):
     plt.legend(loc='upper right')
     plt.title('Training and Validation Loss')
     plt.show()
+
+def get_classification_report(predicted_labels, true_labels, classes):
+    return classification_report(true_labels, predicted_labels,
+                target_names=classes, output_dict=True)
+
 
 def get_confusion_matrix(predicted_labels, true_labels, classes, show=True):
     """
@@ -74,16 +81,20 @@ def get_model_embedding(X, model, index=-2):
     """"""
     return get_layer_output(X, model, index=index)
 
-def umap_final_layer(X, model, n_pca=50, n_umap=2):
+def umap_final_layer(X, pollock_model, n_pca=50, n_umap=2):
     """"""
+    model = pollock_model.model
     embedding = PCA(n_pca).fit_transform(get_model_embedding(X, model))
     embedding = umap.UMAP(n_components=n_umap).fit_transform(embedding)
 
     return embedding
 
-def explain_predictions(model, inputs, label_index, method='smooth_grad', show=True):
+def explain_predictions(pollock_model, inputs, label_index, method='smooth_grad', show=True):
+    model = pollock_model.model
     explainer = SmoothGrad()
     # Compute SmoothGrad on VGG16
     grid = explainer.explain((inputs, None), model, label_index, 20, 1.)
     plt.imshow(grid)
     return grid
+
+def get_classification_report(model

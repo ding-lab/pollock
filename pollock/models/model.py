@@ -22,10 +22,7 @@ import tensorflow as tf
 
 import pollock.preprocessing.preprocessing as pollock_pp
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -36,6 +33,13 @@ GENE_TEMPLATE_PATH = 'gene_template.npy'
 CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
 
+def set_training_devices(devices, jit=False):
+    if jit:
+        tf.config.optimizer.set_jit(True)
+
+    tf.distribute.MirroredStrategy(devices=devices)
+
+
 def get_row_and_col(location, overall_shape, block_shape):
     r = int(location)
     c = int((location - r) * overall_shape[1])
@@ -43,16 +47,17 @@ def get_row_and_col(location, overall_shape, block_shape):
     
     return r, c
 
+
 def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), size=(128, 128)):
     n_genes = block_shape[0] * block_shape[1]
     sc.tl.rank_genes_groups(adata, key, method='t-test', n_genes=n_genes)
     ranked_genes_groups = adata.uns['rank_genes_groups']['names']
     cell_types = sorted(set(adata.obs[key]))
-    
+
     total_pixels = size[0] * size[1]
     current_fraction = int(total_pixels / (4 * n_genes * len(cell_types)))
     expansions = int(math.log(current_fraction, 4)) + 1
-    
+
     spots = np.power(4, expansions)
     block = np.full(size, '', dtype=object)
     cell_template = np.full(size, '', dtype=object)
@@ -60,13 +65,13 @@ def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), si
         genes = ranked_genes_groups[cell_type]
         bs = np.full((block_shape[0] * int(np.sqrt(spots)), block_shape[1] * int(np.sqrt(spots))), '', dtype=object)
         for j, gene in enumerate(genes):
-            
+
             b = np.full((spots,), gene).reshape((int(np.sqrt(spots)), int(np.sqrt(spots))))
             location = (j * b.shape[0]) / bs.shape[0]
             r, c = get_row_and_col(location, bs.shape, b.shape)
             bs[r:r + b.shape[0], c:c + b.shape[1]] = np.copy(b)
-            
-        
+
+
         location = (i * bs.shape[0]) / size[0]
         r, c = get_row_and_col(location, size, bs.shape)
         block[r:r + bs.shape[0], c:c + bs.shape[1]] = np.copy(bs)
@@ -81,11 +86,20 @@ def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), si
 ##             gene_img[i, j] = gene_to_expression.get(template[i, j], 0) + 1
 ##     return np.asarray(gene_img)
 
-def get_expression(gene, d):
-    return d.get(gene, 0) + 1
+## def get_expression(gene, d):
+##     return d[gene] + 1
+## def get_expression_image(gene_to_expression, template):
+##     vf = np.vectorize(get_expression)
+##     return vf(template, gene_to_expression)
+
 def get_expression_image(gene_to_expression, template):
-    vf = np.vectorize(get_expression)
-    return vf(template, gene_to_expression)
+    #img = np.full(template.shape, 1., np.float32)
+    img = np.full(template.shape, 1, np.uint8)
+    for g, e in gene_to_expression.items():
+        img[template==g] = e
+        #img = np.where(template==g, e, 1)
+    return img
+
     
 
 
@@ -111,6 +125,7 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
     logging.info('writing images')
     is_sparse = 'sparse' in str(type(adata.X))
     template = np.asarray(template)
+    available_genes = set(template.flatten())
     for b in range(0, adata.shape[0], batching_size):
         logging.info(f'{b} cell images written')
         batching_adata = adata[b:b+batching_size]
@@ -118,6 +133,9 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
         X = batching_adata.X
         if is_sparse:
             X = X.toarray()
+
+        genes, idxs = zip(*[(g, i) for i, g in enumerate(batching_adata.var.index) if g in available_genes])
+        X = X[:, np.asarray(idxs)]
 
         for i in range(batching_adata.shape[0]):
             if purpose == 'training':
@@ -128,15 +146,24 @@ def write_images(adata, template, cell_type_key='ClusterName', root=os.path.join
             if cell_type not in cell_type_to_fps:
                 cell_type_to_fps[cell_type] = []
     
+#            logging.info('grab cell id')
             cell_id = batching_adata.obs.index[i]
 
+#            logging.info('creating expression dict')
+            expression = (X[i] / np.max(X[i])) * 255.
             gene_to_expression = {g:e
-                    for g, e in zip(batching_adata.var.index, X[i, :].flatten())}
+                    for g, e in zip(genes, expression)}
+#            logging.info('creating expression image')
             gene_img = get_expression_image(gene_to_expression, template)
-            gene_img = (gene_img / np.max(gene_img)) * 255
-            gene_img = gene_img.astype(np.uint8)
+#            logging.info('normalizing image rnage')
+            #gene_img = (gene_img / np.max(gene_img)) * 255
+#            logging.info('set type')
+            #gene_img = gene_img.astype(np.uint8)
+#            logging.info('swap axes')
             gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
+#            logging.info('save image')
             fp = os.path.join(root, 'all', cell_type, f'{cell_id}.jpg')
+#            logging.info('append to fp dict')
             cell_type_to_fps[cell_type].append(fp)
     
             mpl.image.imsave(fp, gene_img)
@@ -268,16 +295,36 @@ class PollockDataset(object):
         self.gene_template, self.cell_type_template = create_block_image_template(self.adata, key=self.cell_type_key)
 
     def get_cell_image(self, cell_id, show=True):
-        if 'sparse' in str(type(self.adata.X)):
-            gene_to_expression = {g:e
-                    for g, e in zip(self.adata.var.index,
-                        np.asarray(self.adata[self.adata.obs.index==cell_id, :].X.todense()).flatten())}
-        else:
-            gene_to_expression = {g:e
-                    for g, e in zip(self.adata.var.index,
-                        np.asarray(self.adata[self.adata.obs.index==cell_id, :].X).flatten())}
+        X = self.adata[self.adata.obs.index==cell_id].X
+        available_genes = set(self.gene_template.flatten())
 
+        if 'sparse' in str(type(X)):
+            X = X.toarray()
+
+        genes, idxs = zip(*[(g, i) for i, g in enumerate(self.adata.var.index) if g in available_genes])
+        X = X[:, np.asarray(idxs)]
+        expression = (X[0] / np.max(X[0])) * 255.
+        gene_to_expression = {g:e
+                for g, e in zip(genes, expression)}
         gene_img = get_expression_image(gene_to_expression, self.gene_template)
+        gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
+
+
+
+
+
+##         if 'sparse' in str(type(self.adata.X)):
+##             gene_to_expression = {g:e
+##                     for g, e in zip(self.adata.var.index,
+##                         np.asarray(self.adata[self.adata.obs.index==cell_id, :].X.todense()).flatten())}
+##         else:
+##             gene_to_expression = {g:e
+##                     for g, e in zip(self.adata.var.index,
+##                         np.asarray(self.adata[self.adata.obs.index==cell_id, :].X).flatten())}
+##         gene_to_expression[''] = 0
+##         expression = (X[i] / np.max(X[i])) * 255.
+## 
+##         gene_img = get_expression_image(gene_to_expression, self.gene_template)
 
         if show:
             plt.imshow(gene_img)
@@ -294,7 +341,7 @@ class PollockDataset(object):
     def write_prediction_images(self):
         initialize_directories(self.cell_types, root=self.image_root_dir, directories=['all'],
                 purpose=self.dataset_type)
-        cell_type_to_fps = write_images(self.adata, self.gene_template, root=self.image_root_dir,
+        write_images(self.adata, self.gene_template, root=self.image_root_dir,
                 purpose=self.dataset_type, cell_type_key=None)
 
     def set_training_datasets(self):
@@ -356,7 +403,8 @@ class PollockModel(object):
 
         if model is None:
             self.model = Sequential([
-                tf.keras.layers.Conv2D(16, 3, padding='same', activation='relu', input_shape=(img_width, img_height ,3)),
+                tf.keras.layers.Conv2D(16, 3, padding='same', activation='relu',
+                    input_shape=(img_width, img_height, 3)),
                 tf.keras.layers.MaxPooling2D(),
                 tf.keras.layers.Conv2D(32, 3, padding='same', activation='relu'),
                 tf.keras.layers.MaxPooling2D(),
@@ -367,6 +415,36 @@ class PollockModel(object):
                 tf.keras.layers.Dense(512, activation='relu'),
                 tf.keras.layers.Dense(len(class_names), activation='softmax')
             ])
+            self.model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=.001),
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
+        elif model == 'mobilenet':
+            base_model = tf.keras.applications.MobileNetV2(input_shape=(img_width, img_height, 3),
+                include_top=False)
+            self.model = tf.keras.Sequential([
+                base_model,
+                tf.keras.layers.GlobalAveragePooling2D(),
+                tf.keras.layers.Flatten(),
+                tf.keras.layers.Dropout(.5),
+                tf.keras.layers.Dense(512, activation='relu'),
+                tf.keras.layers.Dense(len(class_names), activation='softmax')
+                ])
+            self.model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=.001),
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
+        elif model == 'resnet50':
+            base_model = tf.keras.applications.ResNet50V2(input_shape=(img_width, img_height, 3),
+                include_top=False)
+            self.model = tf.keras.Sequential([
+                base_model,
+                tf.keras.layers.GlobalAveragePooling2D(),
+                tf.keras.layers.Flatten(),
+                tf.keras.layers.Dropout(.5),
+                tf.keras.layers.Dense(512, activation='relu'),
+                tf.keras.layers.Dense(len(class_names), activation='softmax')
+                ])
             self.model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=.001),
                 loss='categorical_crossentropy',

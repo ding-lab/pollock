@@ -35,7 +35,7 @@ setup(
         'scanpy==1.4.5.post3',
         'Pillow>=7.0.0',
         'scikit-learn>=0.22.1',
-        'tensorflow==2.0.0',
+        'tensorflow==2.1.0',
         'jupyter',
         'tf-explain==0.2.0',
         'umap-learn>=0.3.10'

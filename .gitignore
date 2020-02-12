@@ -3,6 +3,7 @@ notebooks/.ipynb_checkpoints/
 *.pyc
 output.tsv
 .DS_Store
+*.tfcache*
 
 data/
 results/

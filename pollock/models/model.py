@@ -48,24 +48,51 @@ def get_row_and_col(location, overall_shape, block_shape):
     return r, c
 
 
-def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), size=(128, 128)):
+def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), size=(128, 128), nn_threshold=None):
     n_genes = block_shape[0] * block_shape[1]
-    sc.tl.rank_genes_groups(adata, key, method='t-test', n_genes=n_genes)
+    sc.tl.rank_genes_groups(adata, key, n_genes=n_genes)
     ranked_genes_groups = adata.uns['rank_genes_groups']['names']
     cell_types = sorted(set(adata.obs[key]))
+    pairs = []
+
+    if nn_threshold is not None:
+        logging.info('setting up close groupings')
+        logging.info('calculating nearest neighbors')
+        sc.tl.pca(adata, svd_solver='arpack')
+        #sc.tl.umap(adata)
+        sc.pp.neighbors(adata, n_neighbors=15)
+
+        logging.info('calculating connectivities')
+        cell_type_to_connectivity = get_connectivities(adata, key)
+        close_groupings = get_close_groupings(cell_type_to_connectivity,
+                threshold=nn_threshold)
+
+        logging.info('calculating differential genes')
+##         grouping_to_differential_genes = get_differential_for_grouping(adata,
+##                 close_groupings, n_genes=n_genes)
+        gene_to_diffs = get_differential_for_grouping(adata, key, close_groupings,
+                n_genes=n_genes)
+
+        pairs = [f'{a}_diff_{b}' for a, b in close_groupings]
+        pair_to_genes = {f'{a}_diff_{b}':gs for (a, b), gs in gene_to_diffs.items()}
+
+    combined_labels = cell_types + pairs
 
     total_pixels = size[0] * size[1]
-    current_fraction = int(total_pixels / (4 * n_genes * len(cell_types)))
+    current_fraction = int(total_pixels / (4 * n_genes * len(combined_labels)))
     expansions = int(math.log(current_fraction, 4)) + 1
 
     spots = np.power(4, expansions)
     block = np.full(size, '', dtype=object)
     cell_template = np.full(size, '', dtype=object)
-    for i, cell_type in enumerate(cell_types):
-        genes = ranked_genes_groups[cell_type]
+    for i, label in enumerate(combined_labels):
+        if label in cell_types:
+            genes = ranked_genes_groups[label]
+        else:
+            genes = pair_to_genes[label]
+
         bs = np.full((block_shape[0] * int(np.sqrt(spots)), block_shape[1] * int(np.sqrt(spots))), '', dtype=object)
         for j, gene in enumerate(genes):
-
             b = np.full((spots,), gene).reshape((int(np.sqrt(spots)), int(np.sqrt(spots))))
             location = (j * b.shape[0]) / bs.shape[0]
             r, c = get_row_and_col(location, bs.shape, b.shape)
@@ -75,7 +102,7 @@ def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), si
         location = (i * bs.shape[0]) / size[0]
         r, c = get_row_and_col(location, size, bs.shape)
         block[r:r + bs.shape[0], c:c + bs.shape[1]] = np.copy(bs)
-        cell_template[r:r + bs.shape[0], c:c + bs.shape[1]] = np.full(bs.shape, cell_type, dtype=object)
+        cell_template[r:r + bs.shape[0], c:c + bs.shape[1]] = np.full(bs.shape, label, dtype=object)
 
     return block, cell_template
 
@@ -100,7 +127,58 @@ def get_expression_image(gene_to_expression, template):
         #img = np.where(template==g, e, 1)
     return img
 
+def get_connectivities(adata, cell_type_key):
+    ## calculate connections
+    cell_types = sorted(set(adata.obs[cell_type_key]))
+    cell_type_to_idxs = {c:set(np.argwhere(np.asarray(adata.obs[cell_type_key])==c).flatten())
+            for c in cell_types}
+    cell_type_to_connectivity = {}
+    connectivities = adata.uns['neighbors']['connectivities']
     
+    # mask = adata.uns['neighbors']['distances'] > 0
+    # connectivities = adata.uns['neighbors']['distances']
+    # connectivities[mask] = 1
+    # connectivities.toarray()
+    
+    for cell_type_a in cell_types:
+        conns = {}
+        for cell_type_b in cell_types:
+            a_idxs, b_idxs = cell_type_to_idxs[cell_type_a], cell_type_to_idxs[cell_type_b]
+                    
+            m1 = np.asarray([np.full((adata.shape[0]), True) if r in a_idxs else np.full((adata.shape[0]), False)
+                               for r in range(adata.shape[0])])
+            m2 = np.asarray([np.full((adata.shape[0]), True) if c in b_idxs else np.full((adata.shape[0]), False)
+                               for c in range(adata.shape[0])]).transpose()
+            mask = m1 & m2
+            local = connectivities[mask]
+    
+            conns[cell_type_b] = np.sum(local) * (len(a_idxs) / len(b_idxs))
+    
+        cell_type_to_connectivity[cell_type_a] = conns
+        
+    cell_type_to_connectivity = {k:{ct:value / sum(v.values()) for ct, value in v.items()}
+                                 for k, v in cell_type_to_connectivity.items()}
+
+    return cell_type_to_connectivity
+
+def get_close_groupings(cell_type_to_connectivity, threshold=.05):
+    cell_type_to_close = {cell_type:[] for cell_type in cell_type_to_connectivity.keys()}
+    tups = []
+    for cell_type, d in cell_type_to_connectivity.items():
+        for k, val in d.items():
+            if val > threshold and k != cell_type: tups.append(tuple(sorted([cell_type, k])))
+                
+    return sorted(set(tups))
+
+def get_differential_for_grouping(adata, cell_type_key, close_groupings, n_genes=16):
+    grouping_to_differential = {}
+    for cell_type_a, cell_type_b in close_groupings:
+        filtered = adata[(adata.obs[cell_type_key]==cell_type_a) | (adata.obs[cell_type_key]==cell_type_b)]
+        sc.tl.rank_genes_groups(filtered, cell_type_key, n_genes=n_genes)
+        genes = list(filtered.uns['rank_genes_groups']['names'][cell_type_a][:n_genes // 2])
+        genes += list(filtered.uns['rank_genes_groups']['names'][cell_type_b][:n_genes // 2])
+        grouping_to_differential[(cell_type_a, cell_type_b)] = genes
+    return grouping_to_differential
 
 
 def initialize_directories(cell_types, root=os.path.join(os.getcwd(), 'temp_images'),
@@ -189,7 +267,7 @@ class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', dataset_type='training',
             image_root_dir=os.path.join(os.getcwd(), 'temp_image'), n_per_cell_type=50,
             max_val_per_cell_type=50, gene_template=None, cell_type_template=None,
-            cell_types=None, batch_size=64):
+            cell_types=None, batch_size=64, nn_threshold=.05):
 
         self.image_root_dir = image_root_dir
         self.adata = adata
@@ -198,6 +276,7 @@ class PollockDataset(object):
         self.cell_type_template = cell_type_template
         self.batch_size = batch_size
         self.cell_types = cell_types
+        self.nn_threshold = nn_threshold
         if dataset_type == 'prediction':
             self.prediction_ds = None
             self.prediction_length = None
@@ -292,7 +371,8 @@ class PollockDataset(object):
 
     def set_image_templates(self, n_genes=100):
         sc.tl.rank_genes_groups(self.adata, self.cell_type_key, method='t-test', n_genes=n_genes)
-        self.gene_template, self.cell_type_template = create_block_image_template(self.adata, key=self.cell_type_key)
+        self.gene_template, self.cell_type_template = create_block_image_template(self.adata,
+                key=self.cell_type_key, nn_threshold=self.nn_threshold)
 
     def get_cell_image(self, cell_id, show=True):
         X = self.adata[self.adata.obs.index==cell_id].X

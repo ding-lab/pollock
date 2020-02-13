@@ -55,7 +55,8 @@ def get_row_and_col(location, overall_shape, block_shape):
     return r, c
 
 
-def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4), size=(128, 128), nn_threshold=None):
+def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4),
+        size=(128, 128), nn_threshold=None):
     n_genes = block_shape[0] * block_shape[1]
     sc.tl.rank_genes_groups(adata, key, n_genes=n_genes)
     ranked_genes_groups = adata.uns['rank_genes_groups']['names']
@@ -269,6 +270,25 @@ def setup_training(cell_type_to_fps, train_split=.8, n_per_cell_type=200, max_va
         for fp in validation[:max_val_per_cell_type]:
             shutil.copy(fp, fp.replace(f'/all/{cell_type}/', f'/validation/{cell_type}/'))
     
+def cap_list(ls, n=100):
+    if len(ls) > n:
+        return random.sample(ls, n)
+    return ls
+
+def balanced_adata_filter(adata, cell_type_key, n=1000):
+    cell_type_to_idxs = {}
+    for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
+        if cell_type not in cell_type_to_idxs:
+            cell_type_to_idxs[cell_type] = [cell_id]
+        else:
+            cell_type_to_idxs[cell_type].append(cell_id)
+
+    
+    cell_type_to_idxs = {k:cap_list(ls, n=n)
+                         for k, ls in cell_type_to_idxs.items()}
+    
+    idxs = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
+    return adata[idxs]
 
 class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', dataset_type='training',
@@ -384,9 +404,10 @@ class PollockDataset(object):
 ##                 os.path.rm
         return self.prepare_for_training(labeled_ds, cache=cache, batch_size=batch_size)
 
-    def set_image_templates(self, n_genes=100):
-        sc.tl.rank_genes_groups(self.adata, self.cell_type_key, method='t-test', n_genes=n_genes)
-        self.gene_template, self.cell_type_template = create_block_image_template(self.adata,
+    def set_image_templates(self, n_genes=100, max_per_cell=1000):
+        filtered = balanced_adata_filter(self.adata, self.cell_type_key, n=max_per_cell) 
+        sc.tl.rank_genes_groups(filtered, self.cell_type_key, n_genes=n_genes)
+        self.gene_template, self.cell_type_template = create_block_image_template(filtered,
                 key=self.cell_type_key, nn_threshold=self.nn_threshold)
 
     def get_cell_image(self, cell_id, show=True):
@@ -547,8 +568,11 @@ class PollockModel(object):
             validation_steps=(pollock_dataset.val_length // batch_size) + 1,
             callbacks=self.callbacks)
 
-    def predict(self, pollock_dataset):
+    def predict_pollock_dataset(self, pollock_dataset):
         return self.model.predict(pollock_dataset.prediction_ds)
+
+    def predict(self, ds):
+        return self.model.predict(ds)
 
     def save(self, pollock_training_dataset, filepath, X_val=None, y_val=None):
         ## create directory if does not exist
@@ -592,10 +616,3 @@ class PollockModel(object):
                     }
             json.dump(d, open(os.path.join(filepath, MODEL_SUMMARY_PATH), 'w'),
                     cls=NumpyEncoder)
-
-
-
-
-
-
-

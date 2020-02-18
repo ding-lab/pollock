@@ -39,9 +39,9 @@ def show_history(history):
     plt.title('Training and Validation Loss')
     plt.show()
 
-def get_classification_report(predicted_labels, true_labels, classes):
-    return classification_report(true_labels, predicted_labels,
-                target_names=classes, output_dict=True)
+## def get_classification_report(predicted_labels, true_labels, classes):
+##     return classification_report(true_labels, predicted_labels,
+##                 target_names=classes, output_dict=True)
 
 
 def get_confusion_matrix(predicted_labels, true_labels, classes, show=True):
@@ -97,4 +97,3 @@ def explain_predictions(pollock_model, inputs, label_index, method='smooth_grad'
     plt.imshow(grid)
     return grid
 
-def get_classification_report(model

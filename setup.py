@@ -38,7 +38,8 @@ setup(
         'tensorflow==2.1.0',
         'jupyter',
         'tf-explain==0.2.0',
-        'umap-learn>=0.3.10'
+        'umap-learn>=0.3.10',
+        'loompy>=3.0.6'
         ],
 
 ##     entry_points={  # Optional

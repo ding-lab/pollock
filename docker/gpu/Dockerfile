@@ -11,8 +11,12 @@ FROM tensorflow/tensorflow:latest-gpu-py3-jupyter
 ## opencv si weired in docker
 RUN apt-get install -y libsm6 libxext6 libxrender-dev git
 
+RUN git clone https://github.com/estorrs/dotfiles.git
+RUN cp dotfiles/.vimrc /root/.vimrc
+
 COPY . /tf/pollock
 WORKDIR /tf/pollock
+
 
 RUN /usr/bin/python3 -m pip install .
 

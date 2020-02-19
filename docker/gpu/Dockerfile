@@ -9,7 +9,7 @@ FROM tensorflow/tensorflow:latest-gpu-py3-jupyter
 ## RUN apt-get update
 ## RUN apt-get install -y python3.6
 ## opencv si weired in docker
-RUN apt-get install -y libsm6 libxext6 libxrender-dev
+RUN apt-get install -y libsm6 libxext6 libxrender-dev git
 
 COPY . /tf/pollock
 WORKDIR /tf/pollock

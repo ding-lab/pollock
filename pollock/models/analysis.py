@@ -13,15 +13,18 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import classification_report
 
 
-def show_history(history):
+def show_history(history, from_dict=False):
     """
     Plots tensorflow history of model training
     """
-    acc = history.history['accuracy']
-    val_acc = history.history['val_accuracy']
+    if not from_dict:
+        history = history.history
 
-    loss = history.history['loss']
-    val_loss = history.history['val_loss']
+    acc = history['accuracy']
+    val_acc = history['val_accuracy']
+
+    loss = history['loss']
+    val_loss = history['val_loss']
 
     epochs_range = range(len(acc))
 

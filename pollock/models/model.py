@@ -20,6 +20,7 @@ import scanpy as sc
 from PIL import Image
 from sklearn.metrics import classification_report
 from sklearn.utils import class_weight
+from sklearn.decomposition import PCA
 
 
 from tensorflow.keras.models import Sequential
@@ -40,6 +41,7 @@ GENE_TEMPLATE_PATH = 'gene_template.npy'
 CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
 MODEL_SUMMARY_PATH = 'summary.json' 
+PCA_PATH = 'pca.pkl' 
 
 def set_training_devices(devices, jit=False):
     if jit:
@@ -112,6 +114,13 @@ def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4),
         r, c = get_row_and_col(location, size, bs.shape)
         block[r:r + bs.shape[0], c:c + bs.shape[1]] = np.copy(bs)
         cell_template[r:r + bs.shape[0], c:c + bs.shape[1]] = np.full(bs.shape, label, dtype=object)
+
+##     ## find max filled row
+##     max_row = 0
+##     for i, gene in enumerate(block[:, 0]):
+##         if gene == '':
+##             max_row = i
+##             break
 
     return block, cell_template
 
@@ -303,7 +312,8 @@ class PollockDataset(object):
             image_root_dir=os.path.join(os.getcwd(), 'temp_image'), n_per_cell_type=50,
             max_val_per_cell_type=1000, gene_template=None, cell_type_template=None,
             cell_types=None, batch_size=64, nn_threshold=.05, block_shape=(4, 4),
-            template_shape=(128, 128), template_generation_max_per_cell=100):
+            template_shape=(128, 128), template_generation_max_per_cell=100,
+            pca=None):
 
         self.image_root_dir = image_root_dir
         self.adata = adata
@@ -318,6 +328,7 @@ class PollockDataset(object):
         self.template_shape=template_shape
 
         if dataset_type == 'prediction':
+            self.pca = pca
             self.template_shape = self.gene_template.shape
             self.prediction_ds = None
             self.prediction_length = None
@@ -341,6 +352,7 @@ class PollockDataset(object):
             self.val_length = None
             self.train_cell_ids = None
             self.val_cell_ids = None
+            self.pca = None
 
             self.set_training_datasets()
 
@@ -423,6 +435,11 @@ class PollockDataset(object):
         n_genes = self.block_shape[0] * self.block_shape[1]
         filtered = balanced_adata_filter(self.adata, self.cell_type_key,
                 n=self.template_generation_max_per_cell)
+
+##         self.pca = PCA(n_components=100) 
+##         self.pca.fit_transform(filtered.X)
+
+
         sc.tl.rank_genes_groups(filtered, self.cell_type_key, n_genes=n_genes)
         self.gene_template, self.cell_type_template = create_block_image_template(filtered,
                 key=self.cell_type_key, nn_threshold=self.nn_threshold, size=self.template_shape,
@@ -506,6 +523,7 @@ def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.ge
     gene_template = np.load(os.path.join(model_filepath, GENE_TEMPLATE_PATH), allow_pickle=True)
     cell_type_template = np.load(os.path.join(model_filepath, CELL_TYPE_TEMPLATE_PATH), allow_pickle=True)
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
+    summary = json.load(open(os.path.join(model_filepath, MODEL_SUMMARY_PATH)))
 
     prediction_dataset = PollockDataset(adata, dataset_type='prediction',
            image_root_dir=image_root_dir,
@@ -515,7 +533,7 @@ def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.ge
            batch_size=batch_size)
 
     pollock_model = PollockModel(cell_types, img_width=gene_template.shape[1],
-            img_height=gene_template.shape[0], model=model)
+            img_height=gene_template.shape[0], model=model, summary=summary)
 
     return prediction_dataset, pollock_model
 
@@ -527,7 +545,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 class PollockModel(object):
     def __init__(self, class_names, img_width=128, img_height=128, patience=2, model=None,
-            learning_rate=.001):
+            learning_rate=.001, summary=None):
         self.callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience)]
         self.history = None
 
@@ -585,6 +603,7 @@ class PollockModel(object):
             self.model = model
 
         self.class_names = class_names
+        self.summary = summary
 
     def fit(self, pollock_dataset, batch_size=64, epochs=10, balance_classes=True):
         if not balance_classes:
@@ -595,16 +614,10 @@ class PollockModel(object):
                 validation_steps=(pollock_dataset.val_length // batch_size) + 1,
                 callbacks=self.callbacks)
         else:
-##             cell_labels = pollock_dataset.adata[pollock_dataset.train_cell_ids].obs[pollock_dataset.cell_type_key]
             ls = [pollock_dataset.cell_types.index(x)
                     for x in pollock_dataset.adata[pollock_dataset.train_cell_ids].obs[pollock_dataset.cell_type_key]]
-##             counts = Counter(cell_labels)
-##             class_weights = {pollock_dataset.cell_types.index(c): np.float32((1 / count) * len(cell_labels) / len(counts))
-##                     for c, count in counts.items()}
-##             print(class_weights)
             class_weights = class_weight.compute_class_weight('balanced',
                     np.unique(ls), ls)
-            print(class_weights)
 
             self.history = self.model.fit(pollock_dataset.train_ds,
                 epochs=epochs,
@@ -615,8 +628,19 @@ class PollockModel(object):
                 class_weight=class_weights)
 
 
-    def predict_pollock_dataset(self, pollock_dataset):
-        return self.model.predict(pollock_dataset.prediction_ds)
+    def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
+        if not labels:
+            return self.model.predict(pollock_dataset.prediction_ds)
+
+        probs = self.model.predict(pollock_dataset.prediction_ds)
+        output_classes = np.argmax(probs, axis=1).flatten()
+        output_probs = np.max(probs, axis=1).flatten()
+
+        filtered_output_labels, filtered_output_probs = zip(*[(pollock_dataset.cell_types[c], prob)
+                for c, prob in zip(output_classes, output_probs)
+                if prob > threshold])
+
+        return filtered_output_labels, filtered_output_probs
 
     def predict(self, ds):
         return self.model.predict(ds)
@@ -647,6 +671,8 @@ class PollockModel(object):
 
         if X_train is not None and y_train is not None:
             d['training'] = self.generate_report_for_dataset(X_train, y_train)
+
+        self.summary = d
 
         json.dump(d, open(os.path.join(filepath, MODEL_SUMMARY_PATH), 'w'),
                 cls=NumpyEncoder)

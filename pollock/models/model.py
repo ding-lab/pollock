@@ -1,5 +1,6 @@
 import logging
 import json
+import joblib
 import math
 import os
 import random
@@ -21,6 +22,7 @@ from PIL import Image
 from sklearn.metrics import classification_report
 from sklearn.utils import class_weight
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 from tensorflow.keras.models import Sequential
@@ -40,8 +42,9 @@ MODEL_PATH = 'model.h5'
 GENE_TEMPLATE_PATH = 'gene_template.npy' 
 CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
+PCA_GENES_PATH = 'pca_genes.npy' 
+PCA_PATH = 'pca.pkl'
 MODEL_SUMMARY_PATH = 'summary.json' 
-PCA_PATH = 'pca.pkl' 
 
 def set_training_devices(devices, jit=False):
     if jit:
@@ -139,6 +142,11 @@ def get_expression_image(gene_to_expression, template):
     img = vf(template, gene_to_expression)
     return img.astype(np.uint8)
 
+def add_pca_barcode(expression_img, pcs, start_row):
+    pixels = np.repeat([pcs], expression_img.shape[0] - start_row, axis=0)
+    expression_img[start_row:, :len(pcs)] = (pixels / np.max(pixels)) * 255.
+    return expression_img 
+
 ## def get_expression_image(gene_to_expression, template):
 ##     #img = np.full(template.shape, 1., np.float32)
 ##     img = np.full(template.shape, 1, np.uint8)
@@ -216,15 +224,18 @@ def initialize_directories(filesafe_cell_types, root=os.path.join(os.getcwd(), '
         else:
             os.mkdir(os.path.join(root, x, 'unlabeled'))
 
-            
+
 def write_images(adata, template, cell_type_to_filesafe, cell_type_key='ClusterName', root=os.path.join(os.getcwd(), 'temp_images'),
-        purpose='training', batching_size=1000):
+        purpose='training', batching_size=5000, pca=None, pca_genes=None, pca_scaler=None):
     cell_type_to_fps = {}
     
     logging.info('writing images')
     is_sparse = 'sparse' in str(type(adata.X))
     template = np.asarray(template)
     available_genes = set(template.flatten())
+
+
+
     for b in range(0, adata.shape[0], batching_size):
         logging.info(f'{b} cell images written')
         batching_adata = adata[b:b+batching_size]
@@ -232,6 +243,27 @@ def write_images(adata, template, cell_type_to_filesafe, cell_type_key='ClusterN
         X = batching_adata.X
         if is_sparse:
             X = X.toarray()
+
+        if pca is not None:
+            adata_genes_to_index = {g:i for i, g in enumerate(batching_adata.var.index)}
+            pca_X = np.full((X.shape[0], len(pca_genes)), 0.)
+            for i, gene in enumerate(pca_genes):
+                if gene in adata_genes_to_index:
+                    pca_X[:, i] = np.copy(X[:, adata_genes_to_index[gene]])
+
+            if pca_scaler is None:
+                pca_scaler = StandardScaler()
+                pca_scaler.fit(pca_X)
+
+            pca_X = pca_scaler.transform(pca_X)
+            batched_pcs = pca.transform(pca_X)
+
+            ## do max row setup here for efficiency even though it's out of place
+            pca_start_row = 0
+            for i in range(template.shape[0]):
+                if np.sum(template[i]!='') == 0:
+                    pca_start_row = i
+                    break
 
         genes, idxs = zip(*[(g, i) for i, g in enumerate(batching_adata.var.index) if g in available_genes])
         X = X[:, np.asarray(idxs)]
@@ -254,7 +286,12 @@ def write_images(adata, template, cell_type_to_filesafe, cell_type_key='ClusterN
             gene_to_expression = {g:e
                     for g, e in zip(genes, expression)}
 #            logging.info('creating expression image')
-            gene_img = get_expression_image(gene_to_expression, template)
+            if pca is None:
+                gene_img = get_expression_image(gene_to_expression, template)
+            else:
+                gene_img = get_expression_image(gene_to_expression, template)
+                gene_img = add_pca_barcode(gene_img, batched_pcs[i], start_row=pca_start_row)
+
 #            logging.info('normalizing image rnage')
             #gene_img = (gene_img / np.max(gene_img)) * 255
 #            logging.info('set type')
@@ -313,7 +350,7 @@ class PollockDataset(object):
             max_val_per_cell_type=1000, gene_template=None, cell_type_template=None,
             cell_types=None, batch_size=64, nn_threshold=.05, block_shape=(4, 4),
             template_shape=(128, 128), template_generation_max_per_cell=100,
-            pca=None):
+            pca_genes=None, pca=None):
 
         self.image_root_dir = image_root_dir
         self.adata = adata
@@ -326,9 +363,10 @@ class PollockDataset(object):
         self.nn_threshold = nn_threshold
         self.template_generation_max_per_cell = template_generation_max_per_cell
         self.template_shape=template_shape
+        self.pca_genes = pca_genes
+        self.pca = pca
 
         if dataset_type == 'prediction':
-            self.pca = pca
             self.template_shape = self.gene_template.shape
             self.prediction_ds = None
             self.prediction_length = None
@@ -336,7 +374,6 @@ class PollockDataset(object):
             self.set_prediction_dataset()
             self.cell_ids = [x.split(os.path.sep)[-1].replace('.jpg', '') 
                     for x in self.prediction_ds.filenames]
-##             self.cell_ids = np.asarray(adata.obs.index)
         else:
             self.cell_type_key=cell_type_key
             self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
@@ -352,7 +389,6 @@ class PollockDataset(object):
             self.val_length = None
             self.train_cell_ids = None
             self.val_cell_ids = None
-            self.pca = None
 
             self.set_training_datasets()
 
@@ -436,9 +472,10 @@ class PollockDataset(object):
         filtered = balanced_adata_filter(self.adata, self.cell_type_key,
                 n=self.template_generation_max_per_cell)
 
-##         self.pca = PCA(n_components=100) 
-##         self.pca.fit_transform(filtered.X)
-
+        self.pca = PCA(n_components=self.template_shape[1]) 
+        self.pca_scaler = StandardScaler()
+        self.pca.fit(self.pca_scaler.fit_transform(filtered.X))
+        self.pca_genes = np.asarray(filtered.var.index)
 
         sc.tl.rank_genes_groups(filtered, self.cell_type_key, n_genes=n_genes)
         self.gene_template, self.cell_type_template = create_block_image_template(filtered,
@@ -456,6 +493,28 @@ class PollockDataset(object):
         if 'sparse' in str(type(X)):
             X = X.toarray()
 
+        if self.pca is not None:
+            adata_genes_to_index = {g:i for i, g in enumerate(self.adata.var.index)}
+            pca_X = np.full((X.shape[0], len(self.pca_genes)), 0.)
+            print(pca_X.shape, self.pca_genes.shape)
+            for i, gene in enumerate(self.pca_genes):
+                if gene in adata_genes_to_index:
+                    pca_X[:, i] = np.copy(X[:, adata_genes_to_index[gene]])
+
+            if self.pca_scaler is None:
+                self.pca_scaler = StandardScaler()
+                self.pca_scaler.fit(pca_X)
+
+            pca_X = self.pca_scaler.transform(pca_X)
+            batched_pcs = self.pca.transform(pca_X)
+
+            ## do max row setup here for efficiency even though it's out of place
+            pca_start_row = 0
+            for i in range(self.gene_template.shape[0]):
+                if np.sum(self.gene_template[i]!='') == 0:
+                    pca_start_row = i
+                    break
+
         genes, idxs = zip(*[(g, i) for i, g in enumerate(self.adata.var.index)
                 if g in available_genes])
         X = X[:, np.asarray(idxs)]
@@ -467,7 +526,14 @@ class PollockDataset(object):
             gene_to_expression = {g:e
                     for g, e in zip(genes, expression)}
 
-            gene_img = get_expression_image(gene_to_expression, self.gene_template)
+
+            if self.pca is None:
+                gene_img = get_expression_image(gene_to_expression, self.template)
+            else:
+                gene_img = get_expression_image(gene_to_expression, self.gene_template)
+                gene_img = add_pca_barcode(gene_img, batched_pcs[i], start_row=pca_start_row)
+
+##             gene_img = get_expression_image(gene_to_expression, self.gene_template)
             gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
             gene_imgs.append(gene_img)
 
@@ -480,8 +546,11 @@ class PollockDataset(object):
     def write_training_images(self):
 ##         initialize_directories(self.cell_types, root=self.image_root_dir)
         initialize_directories(self.filesafe_cell_types, root=self.image_root_dir)
+##         cell_type_to_fps = write_images(self.adata, self.gene_template, self.cell_type_to_filesafe,
+##                 root=self.image_root_dir, cell_type_key=self.cell_type_key, pca=None)
         cell_type_to_fps = write_images(self.adata, self.gene_template, self.cell_type_to_filesafe,
-                root=self.image_root_dir, cell_type_key=self.cell_type_key)
+                root=self.image_root_dir, cell_type_key=self.cell_type_key, pca=self.pca,
+                pca_genes=self.pca_genes, pca_scaler=self.pca_scaler)
         setup_training(cell_type_to_fps,
                 n_per_cell_type=self.n_per_cell_type,
                 max_val_per_cell_type=self.max_val_per_cell_type)
@@ -490,7 +559,8 @@ class PollockDataset(object):
         initialize_directories(self.cell_types, root=self.image_root_dir, directories=['all'],
                 purpose=self.dataset_type)
         write_images(self.adata, self.gene_template, {'unlabeled': 'unlabeled'},
-                root=self.image_root_dir, purpose=self.dataset_type, cell_type_key=None)
+                root=self.image_root_dir, purpose=self.dataset_type, cell_type_key=None,
+                pca=self.pca, pca_genes=self.pca_genes, pca_scaler=self.pca_scaler)
 
     def set_training_datasets(self):
         """"""
@@ -524,13 +594,17 @@ def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.ge
     cell_type_template = np.load(os.path.join(model_filepath, CELL_TYPE_TEMPLATE_PATH), allow_pickle=True)
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
     summary = json.load(open(os.path.join(model_filepath, MODEL_SUMMARY_PATH)))
+    pca_genes = np.load(os.path.join(model_filepath, PCA_GENES_PATH), allow_pickle=True)
+    pca = joblib.load(os.path.join(model_filepath, PCA_PATH))
 
     prediction_dataset = PollockDataset(adata, dataset_type='prediction',
            image_root_dir=image_root_dir,
            gene_template=gene_template,
            cell_type_template=cell_type_template,
            cell_types=cell_types,
-           batch_size=batch_size)
+           batch_size=batch_size,
+           pca_genes=pca_genes,
+           pca=pca)
 
     pollock_model = PollockModel(cell_types, img_width=gene_template.shape[1],
             img_height=gene_template.shape[0], model=model, summary=summary)
@@ -659,6 +733,9 @@ class PollockModel(object):
                 pollock_training_dataset.cell_type_template)
         np.save(os.path.join(filepath, CELL_TYPES_PATH),
                 np.asarray(pollock_training_dataset.cell_types))
+        np.save(os.path.join(filepath, PCA_GENES_PATH),
+                np.asarray(pollock_training_dataset.pca_genes))
+        joblib.dump(pollock_training_dataset.pca, os.path.join(filepath, PCA_PATH))
 
         if metadata is not None:
             d = metadata

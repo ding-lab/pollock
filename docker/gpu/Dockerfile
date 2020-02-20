@@ -13,9 +13,11 @@ RUN apt-get install -y libsm6 libxext6 libxrender-dev git vim
 
 RUN git clone https://github.com/estorrs/dotfiles.git \
     && cp dotfiles/.vimrc /root/.vimrc
+    && curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim \
 
 RUN git config --global user.email epstorrs@gmail.com \
     && git config --global user.name Erik Storrs
+
 
 
 COPY . /tf/pollock

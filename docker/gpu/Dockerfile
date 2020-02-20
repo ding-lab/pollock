@@ -9,10 +9,14 @@ FROM tensorflow/tensorflow:latest-gpu-py3-jupyter
 ## RUN apt-get update
 ## RUN apt-get install -y python3.6
 ## opencv si weired in docker
-RUN apt-get install -y libsm6 libxext6 libxrender-dev git
+RUN apt-get install -y libsm6 libxext6 libxrender-dev git vim
 
-RUN git clone https://github.com/estorrs/dotfiles.git
-RUN cp dotfiles/.vimrc /root/.vimrc
+RUN git clone https://github.com/estorrs/dotfiles.git \
+    && cp dotfiles/.vimrc /root/.vimrc
+
+RUN git config --global user.email epstorrs@gmail.com \
+    && git config --global user.name Erik Storrs
+
 
 COPY . /tf/pollock
 WORKDIR /tf/pollock

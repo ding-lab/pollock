@@ -619,9 +619,8 @@ class NumpyEncoder(json.JSONEncoder):
 
 class PollockModel(object):
     def __init__(self, class_names, img_width=128, img_height=128, patience=2, model=None,
-            learning_rate=.001, summary=None):
+            learning_rate=.001, summary=None, callbacks=None):
         self.callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience)]
-        self.history = None
 
         if model is None:
             self.model = Sequential([

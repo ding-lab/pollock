@@ -1,0 +1,31 @@
+##FROM tensorflow/tensorflow:latest-gpu-py3-jupyter
+FROM nvidia/cuda:10.0-base
+
+RUN apt-get update && apt-get install -y vim wget git curl
+
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+RUN bash ~/miniconda.sh -b -p ./miniconda
+ENV PATH="/miniconda/bin:$PATH"
+
+## RUN apt-get update
+## RUN apt-get install -y python3.6
+
+## RUN apt-get install -y libsm6 libxext6 libxrender-dev git vim
+
+RUN pip install jupyter scgen
+
+RUN git clone https://github.com/estorrs/dotfiles.git \
+    && cp dotfiles/.vimrc /root/.vimrc \
+    && curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+
+RUN git config --global user.email epstorrs@gmail.com \
+    && git config --global user.name Erik Storrs
+
+
+COPY . /pollock
+WORKDIR /pollock
+
+
+#RUN /usr/bin/python3 -m pip install .
+
+CMD jupyter notebook --no-browser --allow-root --ip 0.0.0.0

@@ -4,8 +4,10 @@ notebooks/.ipynb_checkpoints/
 output.tsv
 .DS_Store
 *.tfcache*
+*.pdf
 
 data/
 results/
 scratch/
 models/
+figures/

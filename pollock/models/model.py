@@ -153,7 +153,7 @@ class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', n_per_cell_type=500,
             batch_size=64, dataset_type='training', min_genes=200, min_cells=3, mito_threshold=.2,
             max_n_genes=None, log=True, cpm=True, min_disp=.2, standard_scaler=None,
-            range_scaler=None, cell_type_encoder=None):
+            range_scaler=None, cell_type_encoder=None, genes=None):
 
         self.adata = adata
         self.dataset_type = dataset_type
@@ -169,13 +169,14 @@ class PollockDataset(object):
         self.standard_scaler = standard_scaler
         self.range_scaler = range_scaler
         self.cell_type_encoder = cell_type_encoder
+        self.genes = genes
 
         if dataset_type == 'prediction':
             self.set_prediction_dataset()
         else:
             self.cell_type_key=cell_type_key
             self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
-            self.cell_type_encoder = OrdinalEncoder(categories=self.cell_types)
+            self.cell_type_encoder = OrdinalEncoder(categories=[self.cell_types])
             self.n_per_cell_type=n_per_cell_type
             self.train_adata = None
             self.val_adata = None
@@ -193,6 +194,7 @@ class PollockDataset(object):
                 min_genes=self.min_genes, min_cells=self.min_cells, mito_threshold=self.mito_threshold,
                 max_n_genes=self.max_n_genes, log=self.log, cpm=self.cpm, min_disp=self.min_disp,
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
+        self.genes = np.asarray(self.adata.var.index)
 
         logging.info(f'creating datasets')
         self.train_adata, self.val_data = balancedish_training_generator(self.adata,
@@ -211,6 +213,7 @@ class PollockDataset(object):
 
     def set_prediction_dataset(self):
         logging.info(f'normalizing counts for model training')
+        self.adata = self.adata[:, self.genes]
         self.adata = process_from_counts(self.adata,
                 min_genes=self.min_genes, min_cells=self.min_cells, mito_threshold=self.mito_threshold,
                 max_n_genes=self.max_n_genes, log=self.log, cpm=self.cpm, min_disp=self.min_disp,
@@ -224,11 +227,12 @@ def load_from_directory(adata, model_filepath, batch_size=64):
     summary = json.load(open(os.path.join(model_filepath, MODEL_SUMMARY_PATH)))
     standard_scaler = joblib.load(os.path.join(model_filepath, STANDARD_SCALER_PATH))
     range_scaler = joblib.load(os.path.join(model_filepath, RANGE_SCALER_PATH))
+    encoder = joblib.load(os.path.join(model_filepath, ENCODER_PATH))
 
     prediction_dataset = PollockDataset(adata, batch_size=batch_size, dataset_type='prediction',
             min_genes=None, min_cells=None, mito_threshold=None,
             max_n_genes=None, log=True, cpm=True, min_disp=None, standard_scaler=standard_scaler,
-            range_scaler=range_scaler, genes=genes)
+            range_scaler=range_scaler, genes=genes, encoder=encoder)
 
     pollock_model = PollockModel(cell_types, input_shape=len(genes), img_width=gene_template.shape[1],
             img_height=gene_template.shape[0], model=model, summary=summary)
@@ -317,7 +321,7 @@ def compute_apply_gradients(model, x, optimizer, alpha=.00005):
 
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
-            latent_dim=100, clf=RandomForestClassifier(), encoder=None):
+            latent_dim=100, clf=RandomForestClassifier()):
         if model is None:
             model = BVAE(latent_dim, input_shape)
         else:
@@ -330,9 +334,7 @@ class PollockModel(object):
         self.optimizer = tf.keras.optimizers.Adam(self.lr)
 
         self.clf = clf
-        self.encoder = encoder
-        if self.encoder is None:
-            self.encoder = OrdinalEncoder(categories=class_names)
+        self.val_losses = []
 
     def get_cell_embeddings(self, ds):
         mean, logvar = self.model.encode(ds)
@@ -350,6 +352,7 @@ class PollockModel(object):
                 loss(compute_loss(self.model, test_x, alpha=self.alpha))
 
             logging.info(f'epoch: {epoch}, val loss: {loss.result()}') 
+            self.val_losses.append(loss.result())
 
         X_train = self.get_cell_embeddings(pollock_dataset.train_ds)
 
@@ -359,19 +362,19 @@ class PollockModel(object):
         if not labels:
             return self.predict(pollock_dataset.prediction_ds)
 
-        probs = self.model.predict(pollock_dataset.prediction_ds)
+        probs = self.predict(pollock_dataset.prediction_ds)
         output_classes = np.argmax(probs, axis=1).flatten()
         output_probs = np.max(probs, axis=1).flatten()
 
-        filtered_output_labels, filtered_output_probs = zip(*[(pollock_dataset.cell_types[c], prob)
-                for c, prob in zip(output_classes, output_probs)
-                if prob > threshold])
+        output_labels, output_probs = zip(*
+                [(pollock_dataset.encoder.categories[c], prob) if prob > threshold else ('unknown', prob)
+                for c, prob in zip(output_classes, output_probs)])
 
-        return filtered_output_labels, filtered_output_probs
+        return output_labels, output_probs
 
     def predict(self, ds):
         X = self.get_cell_embeddings(ds)
-        self.clf.predict_proba(X)
+        return self.clf.predict_proba(X)
 
     def save(self, pollock_training_dataset, filepath, X_val=None, y_val=None,
             X_train=None, y_train=None, metadata=None):
@@ -381,21 +384,18 @@ class PollockModel(object):
 
         model_fp = os.path.join(filepath, MODEL_PATH)
         self.model.save(model_fp)
-        np.save(os.path.join(filepath, GENE_TEMPLATE_PATH),
-                pollock_training_dataset.gene_template)
-        np.save(os.path.join(filepath, CELL_TYPE_TEMPLATE_PATH),
-                pollock_training_dataset.cell_type_template)
         np.save(os.path.join(filepath, CELL_TYPES_PATH),
                 np.asarray(pollock_training_dataset.cell_types))
-        np.save(os.path.join(filepath, PCA_GENES_PATH),
-                np.asarray(pollock_training_dataset.pca_genes))
-        joblib.dump(pollock_training_dataset.pca, os.path.join(filepath, PCA_PATH))
+        np.save(os.path.join(filepath, GENES_PATH),
+                np.asarray(pollock_training_dataset.genes))
+        joblib.dump(pollock_training_dataset.standard_scaler, os.path.join(filepath, STANDARD_SCALER_PATH))
+        joblib.dump(pollock_training_dataset.range_scaler, os.path.join(filepath, RANGE_SCALER_PATH))
+        joblib.dump(pollock_training_dataset.cell_type_encoder, os.path.join(filepath, ENCODER_PATH))
 
         if metadata is not None:
             d = metadata
 
-        d['history'] = {k:[float(x) for x in v]
-                for k, v in self.history.history.items()}
+        d['history'] = {'validation_losses': self.val_losses}
 
         if X_val is not None and y_val is not None:
             d['validation'] = self.generate_report_for_dataset(X_val, y_val)
@@ -409,7 +409,7 @@ class PollockModel(object):
                 cls=NumpyEncoder)
 
     def generate_report_for_dataset(self, X, y):
-        probs = self.model.predict(X)
+        probs = self.predict(X)
         predictions = np.argmax(probs, axis=1).flatten()
         predicted_labels = [self.class_names[i] for i in predictions]
 
@@ -421,8 +421,7 @@ class PollockModel(object):
                target_names=self.class_names, output_dict=True)
 
         c_df = pollock_analysis.get_confusion_matrix(predictions,
-                groundtruth, self.class_names,  show=False)
-
+                groundtruth, self.class_names, show=False)
 
         d = {
             'metrics': report,

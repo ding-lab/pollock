@@ -6,9 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
-import tf_explain
 import umap
-from tf_explain.core.smoothgrad import SmoothGrad
 from sklearn.decomposition import PCA
 from sklearn.metrics import classification_report
 

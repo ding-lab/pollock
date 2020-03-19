@@ -10,7 +10,6 @@ import uuid
 from collections import Counter, Iterable
 
 import anndata
-import cv2
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -18,12 +17,8 @@ import pandas as pd
 import seaborn as sns
 import scipy
 import scanpy as sc
-from PIL import Image
 from sklearn.metrics import classification_report
-from sklearn.utils import class_weight
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder, MinMaxScaler
 
 from tensorflow.keras.models import Sequential
 import tensorflow as tf
@@ -31,582 +26,211 @@ import tensorflow as tf
 import pollock.preprocessing.preprocessing as pollock_pp
 import pollock.models.analysis as pollock_analysis
 
-
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
-
-AUTOTUNE = tf.data.experimental.AUTOTUNE
-
-
 MODEL_PATH = 'model.h5' 
-GENE_TEMPLATE_PATH = 'gene_template.npy' 
-CELL_TYPE_TEMPLATE_PATH = 'cell_type_template.npy' 
 CELL_TYPES_PATH = 'cell_types.npy' 
-PCA_GENES_PATH = 'pca_genes.npy' 
-PCA_PATH = 'pca.pkl'
 MODEL_SUMMARY_PATH = 'summary.json' 
-
-def set_training_devices(devices, jit=False):
-    if jit:
-        tf.config.optimizer.set_jit(True)
-
-    tf.distribute.MirroredStrategy(devices=devices)
-
-
-def get_row_and_col(location, overall_shape, block_shape):
-    r = int(location)
-    c = int((location - r) * overall_shape[1])
-    r = r * block_shape[0]
-    
-    return r, c
-
-
-def create_block_image_template(adata, key='ClusterName', block_shape=(4, 4),
-        size=(128, 128), nn_threshold=None):
-    n_genes = block_shape[0] * block_shape[1]
-    sc.tl.rank_genes_groups(adata, key, n_genes=n_genes)
-    ranked_genes_groups = adata.uns['rank_genes_groups']['names']
-    cell_types = sorted(set(adata.obs[key]))
-    pairs = []
-
-    if nn_threshold is not None:
-        logging.info('setting up close groupings')
-        logging.info('calculating nearest neighbors')
-        sc.tl.pca(adata, svd_solver='arpack')
-        #sc.tl.umap(adata)
-        sc.pp.neighbors(adata, n_neighbors=15)
-
-        logging.info('calculating connectivities')
-        cell_type_to_connectivity = get_connectivities(adata, key)
-        close_groupings = get_close_groupings(cell_type_to_connectivity,
-                threshold=nn_threshold)
-
-        logging.info('calculating differential genes')
-##         grouping_to_differential_genes = get_differential_for_grouping(adata,
-##                 close_groupings, n_genes=n_genes)
-        gene_to_diffs = get_differential_for_grouping(adata, key, close_groupings,
-                n_genes=n_genes)
-
-        pairs = [f'{a}_diff_{b}' for a, b in close_groupings]
-        pair_to_genes = {f'{a}_diff_{b}':gs for (a, b), gs in gene_to_diffs.items()}
-
-    combined_labels = cell_types + pairs
-
-    total_pixels = size[0] * size[1]
-    current_fraction = int(total_pixels / (4 * n_genes * len(combined_labels)))
-    expansions = int(math.log(current_fraction, 4)) + 1
-
-    spots = np.power(4, expansions)
-    block = np.full(size, '', dtype=object)
-    cell_template = np.full(size, '', dtype=object)
-    for i, label in enumerate(combined_labels):
-        if label in cell_types:
-            genes = ranked_genes_groups[label]
-        else:
-            genes = pair_to_genes[label]
-
-        bs = np.full((block_shape[0] * int(np.sqrt(spots)), block_shape[1] * int(np.sqrt(spots))), '', dtype=object)
-        for j, gene in enumerate(genes):
-            b = np.full((spots,), gene).reshape((int(np.sqrt(spots)), int(np.sqrt(spots))))
-            location = (j * b.shape[0]) / bs.shape[0]
-            r, c = get_row_and_col(location, bs.shape, b.shape)
-            bs[r:r + b.shape[0], c:c + b.shape[1]] = np.copy(b)
-
-
-        location = (i * bs.shape[0]) / size[0]
-        r, c = get_row_and_col(location, size, bs.shape)
-        block[r:r + bs.shape[0], c:c + bs.shape[1]] = np.copy(bs)
-        cell_template[r:r + bs.shape[0], c:c + bs.shape[1]] = np.full(bs.shape, label, dtype=object)
-
-##     ## find max filled row
-##     max_row = 0
-##     for i, gene in enumerate(block[:, 0]):
-##         if gene == '':
-##             max_row = i
-##             break
-
-    return block, cell_template
-
-## def get_expression_image(gene_to_expression, template):
-##     gene_img = np.full(template.shape, 0, dtype=int)
-##     for i in range(template.shape[0]):
-##         for j in range(template.shape[1]):
-##             gene_img[i, j] = gene_to_expression.get(template[i, j], 0) + 1
-##     return np.asarray(gene_img)
-
-def get_expression(gene, d):
-    return d[gene]
-def get_expression_image(gene_to_expression, template):
-    gene_to_expression[''] = 1
-    vf = np.vectorize(get_expression)
-    img = vf(template, gene_to_expression)
-    return img.astype(np.uint8)
-
-def add_pca_barcode(expression_img, pcs, start_row):
-    pixels = np.repeat([pcs], expression_img.shape[0] - start_row, axis=0)
-    expression_img[start_row:, :len(pcs)] = (pixels / np.max(pixels)) * 255.
-    return expression_img 
-
-## def get_expression_image(gene_to_expression, template):
-##     #img = np.full(template.shape, 1., np.float32)
-##     img = np.full(template.shape, 1, np.uint8)
-##     for g, e in gene_to_expression.items():
-##         img[template==g] = e
-##         #img = np.where(template==g, e, 1)
-##     print(np.max(img))
-##     return img
-
-def get_connectivities(adata, cell_type_key):
-    ## calculate connections
-    cell_types = sorted(set(adata.obs[cell_type_key]))
-    cell_type_to_idxs = {c:set(np.argwhere(np.asarray(adata.obs[cell_type_key])==c).flatten())
-            for c in cell_types}
-    cell_type_to_connectivity = {}
-    connectivities = adata.uns['neighbors']['connectivities']
-    
-    # mask = adata.uns['neighbors']['distances'] > 0
-    # connectivities = adata.uns['neighbors']['distances']
-    # connectivities[mask] = 1
-    # connectivities.toarray()
-    
-    for cell_type_a in cell_types:
-        conns = {}
-        for cell_type_b in cell_types:
-            a_idxs, b_idxs = cell_type_to_idxs[cell_type_a], cell_type_to_idxs[cell_type_b]
-                    
-            m1 = np.asarray([np.full((adata.shape[0]), True) if r in a_idxs else np.full((adata.shape[0]), False)
-                               for r in range(adata.shape[0])])
-            m2 = np.asarray([np.full((adata.shape[0]), True) if c in b_idxs else np.full((adata.shape[0]), False)
-                               for c in range(adata.shape[0])]).transpose()
-            mask = m1 & m2
-            local = connectivities[mask]
-    
-            conns[cell_type_b] = np.sum(local) * (len(a_idxs) / len(b_idxs))
-    
-        cell_type_to_connectivity[cell_type_a] = conns
-        
-    cell_type_to_connectivity = {k:{ct:value / sum(v.values()) for ct, value in v.items()}
-                                 for k, v in cell_type_to_connectivity.items()}
-
-    return cell_type_to_connectivity
-
-def get_close_groupings(cell_type_to_connectivity, threshold=.05):
-    cell_type_to_close = {cell_type:[] for cell_type in cell_type_to_connectivity.keys()}
-    tups = []
-    for cell_type, d in cell_type_to_connectivity.items():
-        for k, val in d.items():
-            if val > threshold and k != cell_type: tups.append(tuple(sorted([cell_type, k])))
-                
-    return sorted(set(tups))
-
-def get_differential_for_grouping(adata, cell_type_key, close_groupings, n_genes=16):
-    grouping_to_differential = {}
-    for cell_type_a, cell_type_b in close_groupings:
-        filtered = adata[(adata.obs[cell_type_key]==cell_type_a) | (adata.obs[cell_type_key]==cell_type_b)]
-        sc.tl.rank_genes_groups(filtered, cell_type_key, n_genes=n_genes)
-        genes = list(filtered.uns['rank_genes_groups']['names'][cell_type_a][:n_genes // 2])
-        genes += list(filtered.uns['rank_genes_groups']['names'][cell_type_b][:n_genes // 2])
-        grouping_to_differential[(cell_type_a, cell_type_b)] = genes
-    return grouping_to_differential
-
-
-def initialize_directories(filesafe_cell_types, root=os.path.join(os.getcwd(), 'temp_images'),
-        directories=['training', 'validation', 'all'], purpose='training'):
-    if os.path.isdir(root):
-        shutil.rmtree(root)
-    os.mkdir(root)
-    for x in directories:
-        os.mkdir(os.path.join(root, x))
-
-        if purpose == 'training':
-            for cell_type in sorted(set(filesafe_cell_types)):
-                os.mkdir(os.path.join(root, x, cell_type))
-        else:
-            os.mkdir(os.path.join(root, x, 'unlabeled'))
-
-
-def write_images(adata, template, cell_type_to_filesafe, cell_type_key='ClusterName', root=os.path.join(os.getcwd(), 'temp_images'),
-        purpose='training', batching_size=5000, pca=None, pca_genes=None, pca_scaler=None):
-    cell_type_to_fps = {}
-    
-    logging.info('writing images')
-    is_sparse = 'sparse' in str(type(adata.X))
-    template = np.asarray(template)
-    available_genes = set(template.flatten())
-
-
-
-    for b in range(0, adata.shape[0], batching_size):
-        logging.info(f'{b} cell images written')
-        batching_adata = adata[b:b+batching_size]
-
-        X = batching_adata.X
-        if is_sparse:
-            X = X.toarray()
-
-        if pca is not None:
-            adata_genes_to_index = {g:i for i, g in enumerate(batching_adata.var.index)}
-            pca_X = np.full((X.shape[0], len(pca_genes)), 0.)
-            for i, gene in enumerate(pca_genes):
-                if gene in adata_genes_to_index:
-                    pca_X[:, i] = np.copy(X[:, adata_genes_to_index[gene]])
-
-            if pca_scaler is None:
-                pca_scaler = StandardScaler()
-                pca_scaler.fit(pca_X)
-
-            pca_X = pca_scaler.transform(pca_X)
-            batched_pcs = pca.transform(pca_X)
-
-            ## do max row setup here for efficiency even though it's out of place
-            pca_start_row = 0
-            for i in range(template.shape[0]):
-                if np.sum(template[i]!='') == 0:
-                    pca_start_row = i
-                    break
-
-        genes, idxs = zip(*[(g, i) for i, g in enumerate(batching_adata.var.index) if g in available_genes])
-        X = X[:, np.asarray(idxs)]
-
-        for i in range(batching_adata.shape[0]):
-            if purpose == 'training':
-                cell_type = batching_adata.obs[cell_type_key][i]
-            else:
-                cell_type = 'unlabeled'
-    
-            if cell_type_to_filesafe[cell_type] not in cell_type_to_fps:
-                cell_type_to_fps[cell_type_to_filesafe[cell_type]] = []
-    
-#            logging.info('grab cell id')
-            cell_id = batching_adata.obs.index[i]
-
-#            logging.info('creating expression dict')
-            expression = np.log2(X[i])
-            expression = (expression / np.max(expression)) * 255.
-            gene_to_expression = {g:e
-                    for g, e in zip(genes, expression)}
-#            logging.info('creating expression image')
-            if pca is None:
-                gene_img = get_expression_image(gene_to_expression, template)
-            else:
-                gene_img = get_expression_image(gene_to_expression, template)
-                gene_img = add_pca_barcode(gene_img, batched_pcs[i], start_row=pca_start_row)
-
-#            logging.info('normalizing image rnage')
-            #gene_img = (gene_img / np.max(gene_img)) * 255
-#            logging.info('set type')
-            #gene_img = gene_img.astype(np.uint8)
-#            logging.info('swap axes')
-            gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
-#            logging.info('save image')
-            fp = os.path.join(root, 'all', cell_type_to_filesafe[cell_type], f'{cell_id}.jpg')
-#            logging.info('append to fp dict')
-            cell_type_to_fps[cell_type_to_filesafe[cell_type]].append(fp)
-    
-            mpl.image.imsave(fp, gene_img)
-    logging.info('done writing images')
-    return cell_type_to_fps
-        
-def setup_training(cell_type_to_fps, train_split=.8, n_per_cell_type=200, max_val_per_cell_type=50):
-    for cell_type, fps in cell_type_to_fps.items():
-        random.shuffle(fps)
-        split = int(len(fps) * train_split)
-
-        training = fps[:split]
-        validation = fps[split:]
-
-##         choices = random.choices(training, k=n_per_cell_type)
-##         for i, fp in enumerate(choices):
-        for i, fp in enumerate(training):
-            shutil.copy(fp,
-                fp.replace(f'/all/{cell_type}/', f'/training/{cell_type}/').replace('.jpg', f'_{i}.jpg'))
-        for i, fp in enumerate(validation):
-            shutil.copy(fp,
-                fp.replace(f'/all/{cell_type}/', f'/validation/{cell_type}/').replace('.jpg', f'_{i}.jpg'))
 
 def cap_list(ls, n=100):
     if len(ls) > n:
         return random.sample(ls, n)
     return ls
 
-def balanced_adata_filter(adata, cell_type_key, n=1000):
+## def balanced_adata_filter(adata, cell_type_key, n=1000):
+##     cell_type_to_idxs = {}
+##     for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
+##         if cell_type not in cell_type_to_idxs:
+##             cell_type_to_idxs[cell_type] = [cell_id]
+##         else:
+##             cell_type_to_idxs[cell_type].append(cell_id)
+## 
+##     
+##     cell_type_to_idxs = {k:cap_list(ls, n=n)
+##                          for k, ls in cell_type_to_idxs.items()}
+##     
+##     idxs = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
+##     return adata[idxs]
+
+def balancedish_training_generator(adata, cell_type_key, n_per_cell_type):
     cell_type_to_idxs = {}
     for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
         if cell_type not in cell_type_to_idxs:
             cell_type_to_idxs[cell_type] = [cell_id]
         else:
             cell_type_to_idxs[cell_type].append(cell_id)
-
     
-    cell_type_to_idxs = {k:cap_list(ls, n=n)
+    cell_type_to_idxs = {k:cap_list(ls, n_per_cell_type)
                          for k, ls in cell_type_to_idxs.items()}
     
-    idxs = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
-    return adata[idxs]
+    train_ids = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
+    val_ids = np.delete(np.asarray(adata.obs.index), train_ids)
+
+    train_adata = adata[train_ids, :]
+    val_adata = adata[val_ids, :]
+
+    return train_adata, val_adata
+
+def get_tf_datasets(train_adata, val_adata, train_buffer=10000, batch_size=64):
+    if 'sparse' in str(type(train_adata.X)):
+        X_train = train_adata.X.toarray()
+    else:
+        X_train = train_adata.X
+
+    if 'sparse' in str(type(val_adata.X)):
+        X_val = val_adata.X.toarray()
+    else:
+        X_val = val_adata.X
+
+    train_dataset = tf.data.Dataset.from_tensor_slices(X_train
+            ).shuffle(train_buffer).batch(batch_size)
+    val_dataset = tf.data.Dataset.from_tensor_slices(X_val
+            ).batch(batch_size)
+
+    return train_dataset, val_dataset
+
+def get_tf_prediction_ds(adata, batch_size=1000):
+    if 'sparse' in str(type(adata.X)):
+        X = adata.X.toarray()
+    else:
+        X = adata.X
+
+    dataset = tf.data.Dataset.from_tensor_slices(X).batch(batch_size)
+
+    return dataset
+
+def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, max_n_genes=None,
+        log=True, cpm=True, min_disp=.2, standard_scaler=None, range_scaler=None):
+    if min_genes is not None:
+        sc.pp.filter_cells(adata, min_genes=min_genes)
+    if min_cells is not None:
+        sc.pp.filter_genes(adata, min_cells=min_cells)
+    
+    if mito_threshold is not None or max_n_genes is not None: 
+        mito_genes = tumor_adata.var_names.str.startswith('MT-')
+        if 'sparse' in str(type(adata.X)):
+            adata.obs['percent_mito'] = np.sum(
+                adata[:, mito_genes].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
+            adata.obs['n_counts'] = adata.X.sum(axis=1).A1
+        else
+            adata.obs['percent_mito'] = np.sum(
+                adata[:, mito_genes].X, axis=1) / np.sum(adata.X, axis=1)
+            # add the total counts per cell as observations-annotation to adata
+            adata.obs['n_counts'] = adata.X.sum(axis=1)
+    
+        if mito_threshold is not None:
+            adata = adata[adata.obs.percent_mito < mito_threshold, :]
+        if max_n_genes is not None:
+            adata = adata[adata.obs.n_genes < max_n_genes, :]
+
+    if cpm:
+        sc.pp.normalize_total(adata, target_sum=1e6)
+    if log:
+        sc.pp.log1p(adata)
+    adata.raw = adata
+    
+    if min_disp is not None:
+        sc.pp.highly_variable_genes(adata, min_disp=min_disp)
+        remaining = np.count_nonzero(adata.var.highly_variable)
+        logging.info('remaining after min disp: {remaining}')
+        adata = adata[:, adata.var.highly_variable]
+
+    if standard_scaler is None:
+        standard_scaler = StandardScaler(with_mean=False, with_std=True)
+        adata.X = standard_scaler.fit_transform(adata.X)
+    else:
+        adata.X = standadrd_scaler.transofmr(adata.X)
+
+    if range_scaler is None:
+        range_scaler = MinMaxScaler()
+        adata.X = range_scaler.fit_transform(adata.X)
+    else:
+        adata.X = range_scaler.transform(adata.X)
+
+    return adata
 
 class PollockDataset(object):
-    def __init__(self, adata, cell_type_key='ClusterName', dataset_type='training',
-            image_root_dir=os.path.join(os.getcwd(), 'temp_image'), n_per_cell_type=50,
-            max_val_per_cell_type=1000, gene_template=None, cell_type_template=None,
-            cell_types=None, batch_size=64, nn_threshold=.05, block_shape=(4, 4),
-            template_shape=(128, 128), template_generation_max_per_cell=100,
-            pca_genes=None, pca=None):
+    def __init__(self, adata, cell_type_key='ClusterName', n_per_cell_type=500,
+            batch_size=64, dataset_type='training', min_genes=200, min_cells=3, mito_threshold=.2,
+            max_n_genes=None, log=True, cpm=True, min_disp=.2, standard_scaler=None,
+            range_scaler=None, cell_type_encoder=None):
 
-        self.image_root_dir = image_root_dir
         self.adata = adata
         self.dataset_type = dataset_type
-        self.gene_template = gene_template
-        self.cell_type_template = cell_type_template
         self.batch_size = batch_size
-        self.block_shape = block_shape
         self.cell_types = cell_types
-        self.nn_threshold = nn_threshold
-        self.template_generation_max_per_cell = template_generation_max_per_cell
-        self.template_shape=template_shape
-        self.pca_genes = pca_genes
-        self.pca = pca
+        self.min_genes = min_genes
+        self.min_cells = min_cells
+        self.mito_threshold = mito_threshold
+        self.max_n_genes = max_n_genes
+        self.log = log
+        self.cpm = cpm
+        self.min_disp = min_disp
+        self.standard_scaler = standard_scaler
+        self.range_scaler = range_scaler
+        self.cell_type_encoder = cell_type_encoder
 
         if dataset_type == 'prediction':
-            self.template_shape = self.gene_template.shape
-            self.prediction_ds = None
-            self.prediction_length = None
-
             self.set_prediction_dataset()
-            self.cell_ids = [x.split(os.path.sep)[-1].replace('.jpg', '') 
-                    for x in self.prediction_ds.filenames]
         else:
             self.cell_type_key=cell_type_key
             self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
-            self.cell_type_to_filesafe = {c:str(uuid.uuid4()) for c in self.cell_types}
-            self.filesafe_to_cell_type = {v:k for k, v in self.cell_type_to_filesafe.items()}
-            self.filesafe_cell_types = np.asarray([self.cell_type_to_filesafe[c]
-                    for c in self.cell_types])
+            self.cell_type_encoder = OrdinalEncoder(categories=self.cell_types)
             self.n_per_cell_type=n_per_cell_type
-            self.max_val_per_cell_type = max_val_per_cell_type
+            self.train_adata = None
+            self.val_adata = None
             self.train_ds = None
             self.val_ds = None
-            self.train_length = None
-            self.val_length = None
             self.train_cell_ids = None
             self.val_cell_ids = None
 
             self.set_training_datasets()
 
-    def get_label(self, file_path):
-        # convert the path to a list of path components
-        parts = tf.strings.split(file_path, os.path.sep)
-        # The second to last is the class-directory
-        return parts[-2] == self.filesafe_cell_types
-
-    def decode_img(self, img):
-        # convert the compressed string to a 3D uint8 tensor
-        img = tf.image.decode_jpeg(img, channels=3)
-        # Use `convert_image_dtype` to convert to floats in the [0,1] range.
-        img = tf.image.convert_image_dtype(img, tf.float32)
-        # resize the image to the desired size.
-    #     return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
-        return img
-    
-    def process_path(self, file_path):
-        label = self.get_label(file_path)
-        # load the raw data from the file as a string
-        img = tf.io.read_file(file_path)
-        img = self.decode_img(img)
-        return img, label
-
-    def prepare_for_training(self, ds, cache=True, shuffle_buffer_size=1000, batch_size=64):
-        # This is a small dataset, only load it once, and keep it in memory.
-        # use `.cache(filename)` to cache preprocessing work for datasets that don't
-        # fit in memory.
-        if cache:
-            if isinstance(cache, str):
-                ## remove previous cache if needed
-                ## look for cache files
-                fps = [fp for fp in pollock_pp.listfiles(os.path.dirname(cache), regex=r'\.tfcache') if cache in fp]
-                for fp in fps:
-                    os.remove(fp)
-                ds = ds.cache(cache)
-            else:
-                ds = ds.cache()
-    
-        ds = ds.shuffle(buffer_size=shuffle_buffer_size)
-        # Repeat forever
-        ds = ds.repeat()
-    
-        ds = ds.batch(batch_size)
-    
-        # `prefetch` lets the dataset fetch batches in the background while the model
-        # is training.
-        ds = ds.prefetch(buffer_size=AUTOTUNE)
-    
-        return ds
-
-    def get_prediction_dataset(self, fp, batch_size=64):
-        image_generator = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
-        data_gen = image_generator.flow_from_directory(directory=str(fp),
-                 batch_size=batch_size,
-                 shuffle=False,
-                 target_size=self.template_shape)
-        return data_gen
-
-    def get_training_dataset(self, fp, batch_size=64):
-        image_generator = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
-        data_gen = image_generator.flow_from_directory(directory=str(fp),
-                 batch_size=batch_size,
-                 shuffle=True,
-                 target_size=self.template_shape)
-        return data_gen
-    
-    def get_dataset(self, fp, cache=True, batch_size=64):
-        list_ds = tf.data.Dataset.list_files(str(fp + '/*/*'))
-        cell_ids = np.asarray([fp.numpy().decode('utf-8').split(os.path.sep)[-1].replace('.jpg', '')
-                for fp in list(list_ds)])
-        ## remove cell number
-        cell_ids = ['_'.join(c.split('_')[:-1]) for c in cell_ids]
-        labeled_ds = list_ds.map(self.process_path, num_parallel_calls=AUTOTUNE)
-
-        return self.prepare_for_training(labeled_ds, cache=cache, batch_size=batch_size), cell_ids
-
-    def set_image_templates(self):
-        n_genes = self.block_shape[0] * self.block_shape[1]
-        filtered = balanced_adata_filter(self.adata, self.cell_type_key,
-                n=self.template_generation_max_per_cell)
-
-        self.pca = PCA(n_components=self.template_shape[1]) 
-        self.pca_scaler = StandardScaler()
-        self.pca.fit(self.pca_scaler.fit_transform(filtered.X))
-        self.pca_genes = np.asarray(filtered.var.index)
-
-        sc.tl.rank_genes_groups(filtered, self.cell_type_key, n_genes=n_genes)
-        self.gene_template, self.cell_type_template = create_block_image_template(filtered,
-                key=self.cell_type_key, nn_threshold=self.nn_threshold, size=self.template_shape,
-                block_shape=self.block_shape)
-
-    def get_cell_images(self, cell_ids, show=True):
-        mask = np.asarray([True if c in set(cell_ids) else False
-                for c in self.adata.obs.index])
-
-        filtered = self.adata[mask]
-        X = filtered[np.asarray(cell_ids)].X
-        available_genes = set(self.gene_template.flatten())
-
-        if 'sparse' in str(type(X)):
-            X = X.toarray()
-
-        if self.pca is not None:
-            adata_genes_to_index = {g:i for i, g in enumerate(self.adata.var.index)}
-            pca_X = np.full((X.shape[0], len(self.pca_genes)), 0.)
-            print(pca_X.shape, self.pca_genes.shape)
-            for i, gene in enumerate(self.pca_genes):
-                if gene in adata_genes_to_index:
-                    pca_X[:, i] = np.copy(X[:, adata_genes_to_index[gene]])
-
-            if self.pca_scaler is None:
-                self.pca_scaler = StandardScaler()
-                self.pca_scaler.fit(pca_X)
-
-            pca_X = self.pca_scaler.transform(pca_X)
-            batched_pcs = self.pca.transform(pca_X)
-
-            ## do max row setup here for efficiency even though it's out of place
-            pca_start_row = 0
-            for i in range(self.gene_template.shape[0]):
-                if np.sum(self.gene_template[i]!='') == 0:
-                    pca_start_row = i
-                    break
-
-        genes, idxs = zip(*[(g, i) for i, g in enumerate(self.adata.var.index)
-                if g in available_genes])
-        X = X[:, np.asarray(idxs)]
-
-        gene_imgs = []
-        for i in range(X.shape[0]):
-            expression = np.log2(X[i])
-            expression = (expression / np.max(expression)) * 255.
-            gene_to_expression = {g:e
-                    for g, e in zip(genes, expression)}
-
-
-            if self.pca is None:
-                gene_img = get_expression_image(gene_to_expression, self.template)
-            else:
-                gene_img = get_expression_image(gene_to_expression, self.gene_template)
-                gene_img = add_pca_barcode(gene_img, batched_pcs[i], start_row=pca_start_row)
-
-##             gene_img = get_expression_image(gene_to_expression, self.gene_template)
-            gene_img = np.moveaxis(np.asarray([gene_img, gene_img, gene_img]), 0, -1)
-            gene_imgs.append(gene_img)
-
-            if show:
-                plt.imshow(gene_img)
-                plt.show()
-
-        return np.asarray(gene_imgs)
-
-    def write_training_images(self):
-##         initialize_directories(self.cell_types, root=self.image_root_dir)
-        initialize_directories(self.filesafe_cell_types, root=self.image_root_dir)
-##         cell_type_to_fps = write_images(self.adata, self.gene_template, self.cell_type_to_filesafe,
-##                 root=self.image_root_dir, cell_type_key=self.cell_type_key, pca=None)
-        cell_type_to_fps = write_images(self.adata, self.gene_template, self.cell_type_to_filesafe,
-                root=self.image_root_dir, cell_type_key=self.cell_type_key, pca=self.pca,
-                pca_genes=self.pca_genes, pca_scaler=self.pca_scaler)
-        setup_training(cell_type_to_fps,
-                n_per_cell_type=self.n_per_cell_type,
-                max_val_per_cell_type=self.max_val_per_cell_type)
-
-    def write_prediction_images(self):
-        initialize_directories(self.cell_types, root=self.image_root_dir, directories=['all'],
-                purpose=self.dataset_type)
-        write_images(self.adata, self.gene_template, {'unlabeled': 'unlabeled'},
-                root=self.image_root_dir, purpose=self.dataset_type, cell_type_key=None,
-                pca=self.pca, pca_genes=self.pca_genes, pca_scaler=self.pca_scaler)
-
     def set_training_datasets(self):
         """"""
-        logging.info(f'creating image templates')
-        self.set_image_templates()
-        logging.info(f'writing training images')
-        self.write_training_images()
-        logging.info(f'creating training dataset')
-        self.train_ds, self.train_cell_ids = self.get_dataset(os.path.join(self.image_root_dir, 'training'),
-                cache=os.path.join(os.getcwd(), 'training.tfcache'), batch_size=self.batch_size)
-        logging.info(f'creating validation dataset')
-        self.val_ds, self.val_cell_ids = self.get_dataset(os.path.join(self.image_root_dir, 'validation'),
-                cache=os.path.join(os.getcwd(), 'validation.tfcache'), batch_size=self.batch_size)
-        self.train_length = len(self.train_cell_ids)
-        self.val_length = len(self.val_cell_ids)
+        logging.info(f'normalizing counts for model training')
+        self.adata = process_from_counts(self.adata,
+                min_genes=self.min_genes, min_cells=self.min_cells, mito_threshold=self.mito_threshold,
+                max_n_genes=self.max_n_genes, log=self.log, cpm=self.cpm, min_disp=self.min_disp,
+                standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
+
+        logging.info(f'creating datasets')
+        self.train_adata, self.val_data = balancedish_training_generator(self.adata,
+                self.cell_type_key, self.n_per_cell_type)
+
+        self.train_ds, self.val_ds = get_training_tf_dataset(train_adata, val_adata,
+                train_buffer=10000, batch_size=self.batch_size)
+
+        self.train_cell_ids = np.asarray(self.train_adata.obs.index)
+        self.val_cell_ids = np.asarray(self.val_adata.obs.index)
+
+        self.y_train = np.asarray(self.train_adata.obs[self.cell_type_key])
+        self.y_train = self.cell_type_encoder.transform(self.y_train.reshape(-1, 1)).flatten()
+        self.y_val = np.asarray(self.val_adata.obs[self.cell_type_key])
+        self.y_val = self.cell_type_encoder.transform(self.y_val.reshape(-1, 1)).flatten()
 
     def set_prediction_dataset(self):
-        self.write_prediction_images()
-        self.prediction_ds = self.get_prediction_dataset(os.path.join(self.image_root_dir, 'all'),
-                batch_size=self.batch_size)
-        self.prediction_length = len(
-                list(pollock_pp.listfiles(os.path.join(self.image_root_dir, 'all'),
-                regex='.jpg$')))
+        logging.info(f'normalizing counts for model training')
+        self.adata = process_from_counts(self.adata,
+                min_genes=self.min_genes, min_cells=self.min_cells, mito_threshold=self.mito_threshold,
+                max_n_genes=self.max_n_genes, log=self.log, cpm=self.cpm, min_disp=self.min_disp,
+                standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
+        self.prediction_ds = get_tf_prediction_ds(self.adata, batch_size=1000)
 
-
-
-def load_from_directory(adata, model_filepath, image_root_dir=os.path.join(os.getcwd(), 'prediction'),
-        batch_size=64):
+def load_from_directory(adata, model_filepath, batch_size=64):
     model = tf.keras.models.load_model(os.path.join(model_filepath, MODEL_PATH))
-    gene_template = np.load(os.path.join(model_filepath, GENE_TEMPLATE_PATH), allow_pickle=True)
-    cell_type_template = np.load(os.path.join(model_filepath, CELL_TYPE_TEMPLATE_PATH), allow_pickle=True)
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
+    genes = np.load(os.path.join(model_filepath, GENES_PATH), allow_pickle=True)
     summary = json.load(open(os.path.join(model_filepath, MODEL_SUMMARY_PATH)))
-    pca_genes = np.load(os.path.join(model_filepath, PCA_GENES_PATH), allow_pickle=True)
-    pca = joblib.load(os.path.join(model_filepath, PCA_PATH))
+    standard_scaler = joblib.load(os.path.join(model_filepath, STANDARD_SCALER_PATH))
+    range_scaler = joblib.load(os.path.join(model_filepath, RANGE_SCALER_PATH))
 
-    prediction_dataset = PollockDataset(adata, dataset_type='prediction',
-           image_root_dir=image_root_dir,
-           gene_template=gene_template,
-           cell_type_template=cell_type_template,
-           cell_types=cell_types,
-           batch_size=batch_size,
-           pca_genes=pca_genes,
-           pca=pca)
+    prediction_dataset = PollockDataset(adata, batch_size=batch_size, dataset_type='prediction',
+            min_genes=None, min_cells=None, mito_threshold=None,
+            max_n_genes=None, log=True, cpm=True, min_disp=None, standard_scaler=standard_scaler,
+            range_scaler=range_scaler, genes=genes)
 
-    pollock_model = PollockModel(cell_types, img_width=gene_template.shape[1],
+    pollock_model = PollockModel(cell_types, input_shape=len(genes), img_width=gene_template.shape[1],
             img_height=gene_template.shape[0], model=model, summary=summary)
 
     return prediction_dataset, pollock_model
@@ -617,93 +241,123 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-class PollockModel(object):
-    def __init__(self, class_names, img_width=128, img_height=128, patience=2, model=None,
-            learning_rate=.001, summary=None, callbacks=None):
-        self.callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience)]
-
-        if model is None:
-            self.model = Sequential([
-                tf.keras.layers.Conv2D(16, 3, padding='same', activation='relu',
-                    input_shape=(img_width, img_height, 3)),
-                tf.keras.layers.MaxPooling2D(),
-                tf.keras.layers.Conv2D(32, 3, padding='same', activation='relu'),
-                tf.keras.layers.MaxPooling2D(),
-                tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu'),
-                tf.keras.layers.MaxPooling2D(),
-                tf.keras.layers.Flatten(),
-                tf.keras.layers.Dropout(.5),
-                tf.keras.layers.Dense(512, activation='relu'),
-                tf.keras.layers.Dropout(.5),
-                tf.keras.layers.Dense(512, activation='relu'),
-                tf.keras.layers.Dense(len(class_names), activation='softmax')
+class BVAE(tf.keras.Model):
+    def __init__(self, latent_dim, input_size):
+        super(BVAE, self).__init__()
+        self.latent_dim = latent_dim
+        self.input_size = input_size
+        self.inference_net = tf.keras.Sequential(
+            [
+                tf.keras.layers.InputLayer(input_shape=(input_size,)),
+                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dropout(.2),
+                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dropout(.2),
+                tf.keras.layers.Dense(latent_dim + latent_dim),
             ])
-            self.model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-                loss='categorical_crossentropy',
-                metrics=['accuracy'])
-        elif model == 'mobilenet':
-            base_model = tf.keras.applications.MobileNetV2(input_shape=(img_width, img_height, 3),
-                include_top=False)
-            self.model = tf.keras.Sequential([
-                base_model,
-                tf.keras.layers.GlobalAveragePooling2D(),
-                tf.keras.layers.Flatten(),
-                tf.keras.layers.Dropout(.5),
-                tf.keras.layers.Dense(512, activation='relu'),
-                tf.keras.layers.Dense(len(class_names), activation='softmax')
-                ])
-            self.model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-                loss='categorical_crossentropy',
-                metrics=['accuracy'])
-        elif model == 'resnet50':
-            base_model = tf.keras.applications.ResNet50V2(input_shape=(img_width, img_height, 3),
-                include_top=False)
-            self.model = tf.keras.Sequential([
-                base_model,
-                tf.keras.layers.GlobalAveragePooling2D(),
-                tf.keras.layers.Flatten(),
-                tf.keras.layers.Dropout(.5),
-                tf.keras.layers.Dense(512, activation='relu'),
-                tf.keras.layers.Dense(len(class_names), activation='softmax')
-                ])
-            self.model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-                loss='categorical_crossentropy',
-                metrics=['accuracy'])
+
+        self.generative_net = tf.keras.Sequential(
+            [
+                tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
+                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dropout(.2),
+                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dropout(.2),
+                tf.keras.layers.Dense(input_size),
+            ])
+
+    @tf.function
+    def sample(self, eps=None):
+        if eps is None:
+            eps = tf.random.normal(shape=(100, self.latent_dim))
+        return self.decode(eps, apply_sigmoid=True)
+    
+    def encode(self, x):
+        mean, logvar = tf.split(self.inference_net(x), num_or_size_splits=2, axis=1)
+        return mean, logvar
+    
+    def reparameterize(self, mean, logvar):
+        eps = tf.random.normal(shape=mean.shape)
+        return eps * tf.exp(logvar * .5) + mean
+    
+    def decode(self, z, apply_sigmoid=False):
+        logits = self.generative_net(z)
+        if apply_sigmoid:
+            probs = tf.sigmoid(logits)
+            return probs
+    
+        return logits
+
+optimizer = tf.keras.optimizers.Adam(1e-4)
+
+def log_normal_pdf(sample, mean, logvar, raxis=1):
+    log2pi = tf.math.log(2. * np.pi)
+    return tf.reduce_sum(
+        -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
+        axis=raxis)
+
+@tf.function
+def compute_loss(model, x, alpha=0.00005):
+    mean, logvar = model.encode(x)
+    z = model.reparameterize(mean, logvar)
+    x_logit = model.decode(z)
+
+    kl_loss = .5 * tf.reduce_sum(tf.exp(logvar) + tf.square(mean) - 1. - logvar, axis=1)
+    reconstruction_loss = .5 * tf.reduce_sum(tf.square((x - x_logit)), axis=1)
+
+    overall_loss = tf.reduce_mean(reconstruction_loss + alpha * kl_loss)
+    return overall_loss
+
+@tf.function
+def compute_apply_gradients(model, x, optimizer, alpha=.00005):
+    with tf.GradientTape() as tape:
+        loss = compute_loss(model, x, alpha=alpha)
+    gradients = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+class PollockModel(object):
+    def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
+            latent_dim=100, clf=RandomForestClassifier(), encoder=None):
+        if model is None:
+            model = BVAE(latent_dim, input_shape)
         else:
             self.model = model
 
         self.class_names = class_names
         self.summary = summary
+        self.alpha = alpha
+        self.lr = learning_rate
+        self.optimizer = tf.keras.optimizers.Adam(self.lr)
 
-    def fit(self, pollock_dataset, batch_size=64, epochs=10, balance_classes=True):
-        if not balance_classes:
-            self.history = self.model.fit(pollock_dataset.train_ds,
-                epochs=epochs,
-                steps_per_epoch=(pollock_dataset.train_length // batch_size) + 1,
-                validation_data=pollock_dataset.val_ds,
-                validation_steps=(pollock_dataset.val_length // batch_size) + 1,
-                callbacks=self.callbacks)
-        else:
-            ls = [pollock_dataset.cell_types.index(x)
-                    for x in pollock_dataset.adata[pollock_dataset.train_cell_ids].obs[pollock_dataset.cell_type_key]]
-            class_weights = class_weight.compute_class_weight('balanced',
-                    np.unique(ls), ls)
+        self.clf = clf
+        self.encoder = encoder
+        if self.encoder is None:
+            self.encoder = OrdinalEncoder(categories=class_names)
 
-            self.history = self.model.fit(pollock_dataset.train_ds,
-                epochs=epochs,
-                steps_per_epoch=(pollock_dataset.train_length // batch_size) + 1,
-                validation_data=pollock_dataset.val_ds,
-                validation_steps=(pollock_dataset.val_length // batch_size) + 1,
-                callbacks=self.callbacks,
-                class_weight=class_weights)
+    def get_cell_embeddings(self, ds):
+        mean, logvar = self.model.encode(ds)
+        return self.model.reparameterize(mean, logvar).numpy()
 
+    def fit(self, pollock_dataset, epochs=10):
+        for epoch in range(1, epochs + 1):
+            start_time = time.time()
+            for train_x in pollock_dataset.train_ds:
+                compute_apply_gradients(self.model, train_x, self.optimizer, alpha=self.alpha)
+            end_time = time.time()
+
+            loss = tf.keras.metrics.Mean()
+            for test_x in pollock_dataset.val_ds:
+                loss(compute_loss(self.model, test_x, alpha=self.alpha))
+
+            logging.info(f'epoch: {epoch}, val loss: {loss.result()}') 
+
+        X_train = self.get_cell_embeddings(pollock_dataset.train_ds)
+
+        self.clf.fit(X_train, pollock_dataset.y_train)
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
         if not labels:
-            return self.model.predict(pollock_dataset.prediction_ds)
+            return self.predict(pollock_dataset.prediction_ds)
 
         probs = self.model.predict(pollock_dataset.prediction_ds)
         output_classes = np.argmax(probs, axis=1).flatten()
@@ -716,7 +370,8 @@ class PollockModel(object):
         return filtered_output_labels, filtered_output_probs
 
     def predict(self, ds):
-        return self.model.predict(ds)
+        X = self.get_cell_embeddings(ds)
+        self.clf.predict_proba(X)
 
     def save(self, pollock_training_dataset, filepath, X_val=None, y_val=None,
             X_train=None, y_train=None, metadata=None):

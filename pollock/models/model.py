@@ -26,8 +26,7 @@ from tensorflow.keras.models import Sequential
 import tensorflow as tf
 
 ## import pollock.preprocessing.preprocessing as pollock_pp
-#import pollock.models.model.analysis as pollock_analysis
-#from pollock.models.model.analysis import get_confusion_matrix
+import pollock.models.analysis as pollock_analysis
 #import pollock.models.analysis as pollock_analysis
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
@@ -112,11 +111,14 @@ def get_tf_prediction_ds(adata, batch_size=1000):
 def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, max_n_genes=None,
         log=True, cpm=True, min_disp=.2, standard_scaler=None, range_scaler=None):
     if min_genes is not None:
+        logging.info(f'filtering by min genes: {min_genes}')
         sc.pp.filter_cells(adata, min_genes=min_genes)
     if min_cells is not None:
+        logging.info(f'filtering by min cells: {min_cells}')
         sc.pp.filter_genes(adata, min_cells=min_cells)
     
     if mito_threshold is not None or max_n_genes is not None: 
+        logging.info('calculating MT and gene counts')
         mito_genes = adata.var_names.str.startswith('MT-')
         if 'sparse' in str(type(adata.X)):
             adata.obs['percent_mito'] = np.sum(
@@ -129,21 +131,29 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
             adata.obs['n_counts'] = adata.X.sum(axis=1)
     
         if mito_threshold is not None:
+            logging.info('filtering by mito threshold')
             adata = adata[adata.obs.percent_mito < mito_threshold, :]
         if max_n_genes is not None:
+            logging.info('filtering by n genes threshold')
             adata = adata[adata.obs.n_genes < max_n_genes, :]
 
-##     if cpm:
-##         sc.pp.normalize_total(adata, target_sum=1e6)
+    if cpm:
+        sc.pp.normalize_total(adata, target_sum=1e6)
     if log:
+        logging.info('loging data')
         sc.pp.log1p(adata)
     adata.raw = adata
     
     if min_disp is not None:
-        sc.pp.highly_variable_genes(adata, min_disp=min_disp)
+        logging.info(f'filtering with dispersion {min_disp}')
+        sc.pp.highly_variable_genes(adata, min_mean=None, max_mean=None, min_disp=min_disp)
         remaining = np.count_nonzero(adata.var.highly_variable)
-        logging.info('remaining after min disp: {remaining}')
+        logging.info(f'remaining after min disp: {remaining}')
         adata = adata[:, adata.var.highly_variable]
+
+
+    logging.info('scaling data')
+##     sc.pp.scale(adata, max_value=None)
 
     if standard_scaler is None:
         standard_scaler = StandardScaler(with_mean=False, with_std=True)
@@ -152,7 +162,8 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
         adata.X = standard_scaler.transform(adata.X)
 
     if range_scaler is None:
-        range_scaler = MinMaxScaler()
+        logging.info('scaling to between 0, 1')
+        range_scaler = MinMaxScaler((0, 1))
         adata.X = range_scaler.fit_transform(adata.X)
     else:
         adata.X = range_scaler.transform(adata.X)
@@ -344,10 +355,14 @@ def compute_apply_gradients(model, x, optimizer, alpha=.01):
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
+def batch_adata(adata, n=1000):
+    return [adata.X[i:i+n]
+            for i in range(0, adata.shape[0], n)]
+
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
             latent_dim=100, clf=None):
-##         tf.keras.backend.clear_session()
+        tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
         if model is not None:
             self.model.load_weights(model)
@@ -396,28 +411,22 @@ class PollockModel(object):
 ##             self.model._set_inputs(x)
 ##             break
 
-        X_train = self.get_cell_embeddings(pollock_dataset.train_ds)
-
+        train_batches = batch_adata(pollock_dataset.train_adata, n=1000)
+        X_train = self.get_cell_embeddings(train_batches)
         self.clf.fit(X_train, pollock_dataset.y_train)
 
-        print(self.clf.score(X_train, pollock_dataset.y_train))
-
-        X_train = self.get_cell_embeddings(pollock_dataset.train_ds)
-        print(self.clf.score(X_train, pollock_dataset.y_train))
-
-
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
-        if not labels:
-            return self.predict(pollock_dataset.prediction_ds)
+        prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)
 
-        probs = self.predict(pollock_dataset.prediction_ds)
+        if not labels:
+            return self.predict(prediction_batches)
+
+        probs = self.predict(prediction_batches)
         output_classes = np.argmax(probs, axis=1).flatten()
-        print(probs.shape, output_classes.shape)
-        print(output_classes[:5])
         output_probs = np.max(probs, axis=1).flatten()
 
         output_labels, output_probs = zip(*
-                [(pollock_dataset.cell_type_encoder.categories[c], prob) if prob > threshold else ('unknown', prob)
+                [(pollock_dataset.cell_type_encoder.categories_[0][c], prob) if prob > threshold else ('unknown', prob)
                 for c, prob in zip(output_classes, output_probs)])
 
         return output_labels, output_probs
@@ -425,8 +434,6 @@ class PollockModel(object):
     def predict(self, ds):
         X = self.get_cell_embeddings(ds)
         probs = self.clf.predict_proba(X)
-        print(self.clf.predict(X)[:5])
-
         return probs
 
     def save(self, pollock_training_dataset, filepath, score_train=True,
@@ -454,14 +461,17 @@ class PollockModel(object):
 
         d['history'] = {'validation_losses': self.val_losses}
 
+        train_batches = batch_adata(pollock_training_dataset.train_adata, n=1000)
+        val_batches = batch_adata(pollock_training_dataset.val_adata, n=1000)
+
         if score_train:
             d['training'] = self.generate_report_for_dataset(
-                    pollock_training_dataset.train_ds,
+                    train_batches,
                     pollock_training_dataset.y_train)
 
         if score_val:
             d['validation'] = self.generate_report_for_dataset(
-                    pollock_training_dataset.val_ds,
+                    val_batches,
                     pollock_training_dataset.y_val)
 
         self.summary = d
@@ -479,14 +489,14 @@ class PollockModel(object):
         report = classification_report(groundtruth,
                 predictions, target_names=self.class_names, output_dict=True)
 
-##         c_df = get_confusion_matrix(predictions,
-##                 groundtruth, self.class_names, show=False)
+        c_df = pollock_analysis.get_confusion_matrix(predictions,
+                groundtruth, self.class_names, show=False)
 
         d = {
             'metrics': report,
             'probabilities': probs,
             'prediction_labels': predicted_labels,
             'groundtruth_labels': groundtruth_labels,
-##             'confusion_matrix': c_df.values,
+            'confusion_matrix': c_df.values,
             }
         return d

@@ -414,6 +414,11 @@ class PollockModel(object):
         train_batches = batch_adata(pollock_dataset.train_adata, n=1000)
         X_train = self.get_cell_embeddings(train_batches)
         self.clf.fit(X_train, pollock_dataset.y_train)
+        print(self.clf.score(X_train, pollock_dataset.y_train))
+
+        val_batches = batch_adata(pollock_dataset.val_adata, n=1000)
+        X_val = self.get_cell_embeddings(val_batches)
+        print(self.clf.score(X_val, pollock_dataset.y_val))
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
         prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)

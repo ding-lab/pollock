@@ -346,11 +346,14 @@ def compute_apply_gradients(model, x, optimizer, alpha=.01):
 
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
-            latent_dim=100, clf=RandomForestClassifier()):
+            latent_dim=100, clf=None):
 ##         tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
         if model is not None:
             self.model.load_weights(model)
+
+        if clf is None:
+            clf = RandomForestClassifier()
 
         self.class_names = class_names
         self.summary = summary
@@ -398,6 +401,10 @@ class PollockModel(object):
         self.clf.fit(X_train, pollock_dataset.y_train)
 
         print(self.clf.score(X_train, pollock_dataset.y_train))
+
+        X_train = self.get_cell_embeddings(pollock_dataset.train_ds)
+        print(self.clf.score(X_train, pollock_dataset.y_train))
+
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
         if not labels:

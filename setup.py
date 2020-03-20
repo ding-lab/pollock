@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     # $ pip install pollock
     name='pollock',
-    version='0.0.2',
+    version='0.0.3',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -29,15 +29,12 @@ setup(
     install_requires=[
         'pandas>=1.0.0',
         'anndata>=0.7.1',
-        'opencv-python>=4.2.0.32',
         'seaborn>=0.10.0',
         'scipy>=1.4.1',
         'scanpy==1.4.5.post3',
-        'Pillow>=7.0.0',
         'scikit-learn>=0.22.1',
         'tensorflow==2.1.0',
         'jupyter',
-        'tf-explain==0.2.0',
         'umap-learn>=0.3.10',
         'loompy>=3.0.6'
         ],

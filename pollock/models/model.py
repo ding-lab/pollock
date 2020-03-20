@@ -27,7 +27,8 @@ import tensorflow as tf
 
 ## import pollock.preprocessing.preprocessing as pollock_pp
 #import pollock.models.model.analysis as pollock_analysis
-from pollock import get_confusion_matrix
+#from pollock.models.model.analysis import get_confusion_matrix
+#import pollock.models.analysis as pollock_analysis
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
@@ -135,7 +136,6 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
 ##     if cpm:
 ##         sc.pp.normalize_total(adata, target_sum=1e6)
     if log:
-        print('here')
         sc.pp.log1p(adata)
     adata.raw = adata
     
@@ -294,10 +294,8 @@ class BVAE(tf.keras.Model):
         mean, logvar = tf.split(self.inference_net(x), num_or_size_splits=2, axis=1)
         return mean, logvar
     
-    @tf.function
     def reparameterize(self, mean, logvar):
         eps = tf.random.normal(shape=mean.shape)
-#        eps = tf.random.normal(shape=mean.shape)
         return eps * tf.exp(logvar * .5) + mean
     
     def decode(self, z, apply_sigmoid=False):
@@ -309,7 +307,6 @@ class BVAE(tf.keras.Model):
         return logits
 
 ##     def predict(self, x):
-##         print(x.shape)
 ##         mean, logvar = self.encode(x)
 ##         z = self.reparameterize(mean, logvar)
 ##         x_logit = self.decode(z)
@@ -329,7 +326,7 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
         axis=raxis)
 
 @tf.function
-def compute_loss(model, x, alpha=0.00005):
+def compute_loss(model, x, alpha=0.01):
     mean, logvar = model.encode(x)
     z = model.reparameterize(mean, logvar)
     x_logit = model.decode(z)
@@ -341,7 +338,7 @@ def compute_loss(model, x, alpha=0.00005):
     return overall_loss
 
 @tf.function
-def compute_apply_gradients(model, x, optimizer, alpha=.00005):
+def compute_apply_gradients(model, x, optimizer, alpha=.01):
     with tf.GradientTape() as tape:
         loss = compute_loss(model, x, alpha=alpha)
     gradients = tape.gradient(loss, model.trainable_variables)
@@ -350,7 +347,7 @@ def compute_apply_gradients(model, x, optimizer, alpha=.00005):
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
             latent_dim=100, clf=RandomForestClassifier()):
-        tf.keras.backend.clear_session()
+##         tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
         if model is not None:
             self.model.load_weights(model)
@@ -400,23 +397,30 @@ class PollockModel(object):
 
         self.clf.fit(X_train, pollock_dataset.y_train)
 
+        print(self.clf.score(X_train, pollock_dataset.y_train))
+
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
         if not labels:
             return self.predict(pollock_dataset.prediction_ds)
 
         probs = self.predict(pollock_dataset.prediction_ds)
         output_classes = np.argmax(probs, axis=1).flatten()
+        print(probs.shape, output_classes.shape)
+        print(output_classes[:5])
         output_probs = np.max(probs, axis=1).flatten()
 
         output_labels, output_probs = zip(*
-                [(pollock_dataset.encoder.categories[c], prob) if prob > threshold else ('unknown', prob)
+                [(pollock_dataset.cell_type_encoder.categories[c], prob) if prob > threshold else ('unknown', prob)
                 for c, prob in zip(output_classes, output_probs)])
 
         return output_labels, output_probs
 
     def predict(self, ds):
         X = self.get_cell_embeddings(ds)
-        return self.clf.predict_proba(X)
+        probs = self.clf.predict_proba(X)
+        print(self.clf.predict(X)[:5])
+
+        return probs
 
     def save(self, pollock_training_dataset, filepath, score_train=True,
             score_val=True, metadata=None):
@@ -449,7 +453,7 @@ class PollockModel(object):
                     pollock_training_dataset.y_train)
 
         if score_val:
-            d['training'] = self.generate_report_for_dataset(
+            d['validation'] = self.generate_report_for_dataset(
                     pollock_training_dataset.val_ds,
                     pollock_training_dataset.y_val)
 
@@ -468,14 +472,14 @@ class PollockModel(object):
         report = classification_report(groundtruth,
                 predictions, target_names=self.class_names, output_dict=True)
 
-        c_df = get_confusion_matrix(predictions,
-                groundtruth, self.class_names, show=False)
+##         c_df = get_confusion_matrix(predictions,
+##                 groundtruth, self.class_names, show=False)
 
         d = {
             'metrics': report,
             'probabilities': probs,
             'prediction_labels': predicted_labels,
             'groundtruth_labels': groundtruth_labels,
-            'confusion_matrix': c_df.values,
+##             'confusion_matrix': c_df.values,
             }
         return d

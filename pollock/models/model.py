@@ -138,6 +138,7 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
             adata = adata[adata.obs.n_genes < max_n_genes, :]
 
     if cpm:
+        logging.info('converting to cpm')
         sc.pp.normalize_total(adata, target_sum=1e6)
     if log:
         logging.info('loging data')
@@ -362,13 +363,13 @@ def batch_adata(adata, n=1000):
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
             latent_dim=100, clf=None):
-        tf.keras.backend.clear_session()
+##         tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
         if model is not None:
             self.model.load_weights(model)
 
         if clf is None:
-            clf = RandomForestClassifier()
+            clf = RandomForestClassifier(n_estimators=100)
 
         self.class_names = class_names
         self.summary = summary

@@ -36,12 +36,12 @@ setup(
         'tensorflow==2.1.0',
         'jupyter',
         'umap-learn>=0.3.10',
-        'loompy>=3.0.6'
+        'loompy>=3.0.6',
         ],
 
-##     entry_points={  # Optional
-##         'console_scripts': [
-##             'pollock=pollock.pollock:main',
-##         ],
-##    },
+    entry_points={  # Optional
+        'console_scripts': [
+            'pollock=pollock.pollock:main',
+        ],
+   },
 )

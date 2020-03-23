@@ -19,7 +19,7 @@ import seaborn as sns
 import scipy
 import scanpy as sc
 from sklearn.metrics import classification_report
-from sklearn.preprocessing import StandardScaler, OrdinalEncoder, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, OrdinalEncoder, MinMaxScaler, MaxAbsScaler
 from sklearn.ensemble import RandomForestClassifier
 
 from tensorflow.keras.models import Sequential
@@ -45,21 +45,6 @@ def cap_list(ls, n=100):
         return random.sample(ls, n)
     return random.sample(ls, int(len(ls) * .8))
 
-## def balanced_adata_filter(adata, cell_type_key, n=1000):
-##     cell_type_to_idxs = {}
-##     for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
-##         if cell_type not in cell_type_to_idxs:
-##             cell_type_to_idxs[cell_type] = [cell_id]
-##         else:
-##             cell_type_to_idxs[cell_type].append(cell_id)
-## 
-##     
-##     cell_type_to_idxs = {k:cap_list(ls, n=n)
-##                          for k, ls in cell_type_to_idxs.items()}
-##     
-##     idxs = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
-##     return adata[idxs]
-
 def balancedish_training_generator(adata, cell_type_key, n_per_cell_type):
     cell_type_to_idxs = {}
     for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
@@ -81,12 +66,12 @@ def balancedish_training_generator(adata, cell_type_key, n_per_cell_type):
     return train_adata, val_adata
 
 def get_tf_datasets(train_adata, val_adata, train_buffer=10000, batch_size=64):
-    if 'sparse' in str(type(train_adata.X)):
+    if 'sparse' in str(type(train_adata.X)).lower():
         X_train = train_adata.X.toarray()
     else:
         X_train = train_adata.X
 
-    if 'sparse' in str(type(val_adata.X)):
+    if 'sparse' in str(type(val_adata.X)).lower():
         X_val = val_adata.X.toarray()
     else:
         X_val = val_adata.X
@@ -99,7 +84,7 @@ def get_tf_datasets(train_adata, val_adata, train_buffer=10000, batch_size=64):
     return train_dataset, val_dataset
 
 def get_tf_prediction_ds(adata, batch_size=1000):
-    if 'sparse' in str(type(adata.X)):
+    if 'sparse' in str(type(adata.X)).lower():
         X = adata.X.toarray()
     else:
         X = adata.X
@@ -109,18 +94,19 @@ def get_tf_prediction_ds(adata, batch_size=1000):
     return dataset
 
 def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, max_n_genes=None,
-        log=True, cpm=True, min_disp=.2, standard_scaler=None, range_scaler=None):
+        log=True, cpm=True, min_disp=.2, standard_scaler=None, range_scaler=None,
+        normalize_samples=True):
     if min_genes is not None:
         logging.info(f'filtering by min genes: {min_genes}')
         sc.pp.filter_cells(adata, min_genes=min_genes)
     if min_cells is not None:
         logging.info(f'filtering by min cells: {min_cells}')
         sc.pp.filter_genes(adata, min_cells=min_cells)
-    
+
     if mito_threshold is not None or max_n_genes is not None: 
         logging.info('calculating MT and gene counts')
         mito_genes = adata.var_names.str.startswith('MT-')
-        if 'sparse' in str(type(adata.X)):
+        if 'sparse' in str(type(adata.X)).lower():
             adata.obs['percent_mito'] = np.sum(
                 adata[:, mito_genes].X, axis=1).A1 / np.sum(adata.X, axis=1).A1
             adata.obs['n_counts'] = adata.X.sum(axis=1).A1
@@ -137,9 +123,6 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
             logging.info('filtering by n genes threshold')
             adata = adata[adata.obs.n_genes < max_n_genes, :]
 
-    if cpm:
-        logging.info('converting to cpm')
-        sc.pp.normalize_total(adata, target_sum=1e6)
     if log:
         logging.info('loging data')
         sc.pp.log1p(adata)
@@ -156,6 +139,9 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
     logging.info('scaling data')
 ##     sc.pp.scale(adata, max_value=None)
 
+##     if normalize_samples:
+##         adata.X = adata.X / np.sum(adata.X, axis=1).reshape(-1, 1) 
+
     if standard_scaler is None:
         standard_scaler = StandardScaler(with_mean=False, with_std=True)
         adata.X = standard_scaler.fit_transform(adata.X)
@@ -163,8 +149,9 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
         adata.X = standard_scaler.transform(adata.X)
 
     if range_scaler is None:
-        logging.info('scaling to between 0, 1')
-        range_scaler = MinMaxScaler((0, 1))
+        logging.info('scaling to between 0-1')
+##         range_scaler = MinMaxScaler((0, 1))
+        range_scaler = MaxAbsScaler()
         adata.X = range_scaler.fit_transform(adata.X)
     else:
         adata.X = range_scaler.transform(adata.X)
@@ -357,8 +344,12 @@ def compute_apply_gradients(model, x, optimizer, alpha=.01):
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
 def batch_adata(adata, n=1000):
-    return [adata.X[i:i+n]
-            for i in range(0, adata.shape[0], n)]
+    if 'sparse' in str(type(adata.X)).lower():
+        return [adata.X[i:i+n].toarray()
+                for i in range(0, adata.shape[0], n)]
+    else:
+        return [adata.X[i:i+n]
+                for i in range(0, adata.shape[0], n)]
 
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
@@ -417,12 +408,14 @@ class PollockModel(object):
         self.clf.fit(X_train, pollock_dataset.y_train)
         print(self.clf.score(X_train, pollock_dataset.y_train))
 
-        val_batches = batch_adata(pollock_dataset.val_adata, n=1000)
+##         val_batches = batch_adata(pollock_dataset.val_adata, n=1000)
+        val_batches = pollock_dataset.val_ds
         X_val = self.get_cell_embeddings(val_batches)
         print(self.clf.score(X_val, pollock_dataset.y_val))
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
-        prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)
+##         prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)
+        prediction_batches = pollock_dataset.prediction_ds
 
         if not labels:
             return self.predict(prediction_batches)
@@ -468,7 +461,8 @@ class PollockModel(object):
         d['history'] = {'validation_losses': self.val_losses}
 
         train_batches = batch_adata(pollock_training_dataset.train_adata, n=1000)
-        val_batches = batch_adata(pollock_training_dataset.val_adata, n=1000)
+##         val_batches = batch_adata(pollock_training_dataset.val_adata, n=1000)
+        val_batches = pollock_training_dataset.val_ds
 
         if score_train:
             d['training'] = self.generate_report_for_dataset(

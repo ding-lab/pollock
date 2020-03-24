@@ -149,14 +149,37 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
         adata.X = standard_scaler.transform(adata.X)
 
     if range_scaler is None:
-        logging.info('scaling to between 0-1')
-##         range_scaler = MinMaxScaler((0, 1))
         range_scaler = MaxAbsScaler()
         adata.X = range_scaler.fit_transform(adata.X)
     else:
+        ## see if this works, some minmaxscalers were saved with model and wont work on sparse
+        if 'maxabsscaler' not in str(type(range_scaler)).lower():
+            range_scaler = MaxAbsScaler()
+            range_scaler.fit(adata.X)
+            
         adata.X = range_scaler.transform(adata.X)
 
     return adata, standard_scaler, range_scaler
+
+
+def filter_adata_genes(adata, genes):
+    logging.info('filtering for training genes')
+    training_genes = set(genes)
+    prediction_genes = set(adata.var.index)
+    missing = list(training_genes - prediction_genes)
+    logging.info(f'{len(missing)} genes missing from prediction set')
+
+    X = adata.X
+    if 'sparse' in str(type(X)).lower():
+        X = scipy.sparse.hstack([X, scipy.sparse.coo_matrix((adata.shape[0], len(missing)))])
+        X = X.tocsr()
+    else:
+        X = np.concatenate((X, np.zeros((adata.shape[0], len(missing)))), axis=1)
+    vars = list(adata.var.index) + missing
+    new_adata = anndata.AnnData(X=X, obs=adata.obs)
+    new_adata.var.index = vars
+
+    return new_adata[:, genes]
 
 class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', n_per_cell_type=500,
@@ -205,7 +228,7 @@ class PollockDataset(object):
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
         self.genes = np.asarray(self.adata.var.index)
 
-        logging.info(f'creating datasets')
+        logging.info(f'creating tf datasets')
         self.train_adata, self.val_adata = balancedish_training_generator(self.adata,
                 self.cell_type_key, self.n_per_cell_type)
 
@@ -221,8 +244,8 @@ class PollockDataset(object):
         self.y_val = self.cell_type_encoder.transform(self.y_val.reshape(-1, 1)).flatten()
 
     def set_prediction_dataset(self):
-        logging.info(f'normalizing counts for model training')
-        self.prediction_adata = self.adata[:, self.genes]
+        logging.info(f'normalizing counts for prediction')
+        self.prediction_adata = filter_adata_genes(self.adata, self.genes)
         self.prediction_adata, _, _ = process_from_counts(self.prediction_adata,
                 min_genes=self.min_genes, min_cells=self.min_cells, mito_threshold=self.mito_threshold,
                 max_n_genes=self.max_n_genes, log=self.log, cpm=self.cpm, min_disp=self.min_disp,
@@ -240,7 +263,7 @@ def load_from_directory(adata, model_filepath, batch_size=64):
     clf = joblib.load(os.path.join(model_filepath, CLASSIFIER_PATH))
 
     prediction_dataset = PollockDataset(adata, batch_size=batch_size, dataset_type='prediction',
-            min_genes=None, min_cells=None, mito_threshold=None,
+            min_genes=200, min_cells=None, mito_threshold=None,
             max_n_genes=None, log=True, cpm=True, min_disp=None, standard_scaler=standard_scaler,
             range_scaler=range_scaler, genes=genes, cell_type_encoder=encoder,
             cell_types=cell_types)
@@ -352,7 +375,8 @@ def batch_adata(adata, n=1000):
                 for i in range(0, adata.shape[0], n)]
 
 class PollockModel(object):
-    def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4, summary=None, alpha=.1,
+    def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4,
+            summary=None, alpha=.1,
             latent_dim=100, clf=None):
 ##         tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
@@ -406,12 +430,9 @@ class PollockModel(object):
         train_batches = batch_adata(pollock_dataset.train_adata, n=1000)
         X_train = self.get_cell_embeddings(train_batches)
         self.clf.fit(X_train, pollock_dataset.y_train)
-        print(self.clf.score(X_train, pollock_dataset.y_train))
 
-##         val_batches = batch_adata(pollock_dataset.val_adata, n=1000)
         val_batches = pollock_dataset.val_ds
         X_val = self.get_cell_embeddings(val_batches)
-        print(self.clf.score(X_val, pollock_dataset.y_val))
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
 ##         prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)

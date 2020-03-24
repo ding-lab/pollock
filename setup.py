@@ -27,11 +27,11 @@ setup(
     packages=['pollock'],
     python_requires='>=3.6',
     install_requires=[
+        'scanpy==1.4.5.post3',
         'pandas>=1.0.0',
         'anndata>=0.7.1',
         'seaborn>=0.10.0',
         'scipy>=1.4.1',
-        'scanpy==1.4.5.post3',
         'scikit-learn>=0.22.1',
         'tensorflow==2.1.0',
         'jupyter',

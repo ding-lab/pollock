@@ -11,8 +11,11 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('cellranger_counts_directory', type=str,
-        help='Directory filepath holding results of 10x cellranger run')
+parser.add_argument('counts_10x_filepath', type=str,
+        help='Results of 10X cellranger run to be used for classification. \
+There are two options for inputs: 1) the mtx count directory \
+(typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at \
+outs/raw_feature_bc_matrix.h5).')
 parser.add_argument('module_filepath', type=str,
         help='Filepath to module to use for classification')
 parser.add_argument('--output', type=str, default='output.tsv',
@@ -25,8 +28,14 @@ args = parser.parse_args()
 
 def main():
     logging.info('loading in 10x data')
-    adata = sc.read_10x_mtx(args.cellranger_counts_directory,
-            var_names='gene_symbols')
+
+    if args.counts_10x_filepath.split('.')[-1] == 'h5':
+        logging.info('reading in .h5 file')
+        adata = sc.read_10x_h5(args.counts_10x_filepath)
+    else:
+        logging.info('reading in .mtx.gz file')
+        adata = sc.read_10x_mtx(args.counts_10x_filepath,
+                var_names='gene_symbols')
 
     logging.info('processing in counts and loading classification module')
     loaded_pds, loaded_pm = load_from_directory(adata, args.module_filepath,

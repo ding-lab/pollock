@@ -47,7 +47,7 @@ usage: pollock [-h] [--output OUTPUT]
 ##### Arguments
 
 10x_counts_filepath
-  *  Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx.gz count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
+  *  Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx.gz count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5). NOTE: eventually there will be an option to pass a seurat or scanpy object, but for this version it is limited to just the 10x output.
   
 module_filepath
   * The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.

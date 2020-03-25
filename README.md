@@ -58,6 +58,11 @@ module_filepath
 --output
   * Filepath to write predictions output file. Default is output.tsv.
   
+##### Outputs
+
+Output is a .tsv file with cell_id, predicted_cell_type, and probability fields
+  
+  
 ##### example basic usage
 
 An example of running the single-cell cesc module with 10x .mtx.gz output
@@ -76,8 +81,8 @@ An example of running the single-cell cesc module from within a docker container
 ```bash
 docker run -v </filepath/to/cellranger/outs/>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock-cpu pollock --output /outputs/output.tsv /inputs/raw_feature_bc_matrix /modules/sc_cesc
 ```
-  
-### Outputs
 
-Output is a .tsv file with cell_id, predicted_cell_type, and probability fields
+##### training your own modules
+
+Coming soon :)
 

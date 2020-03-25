@@ -3,3 +3,4 @@ data/
 
 *.tfcache*
 notebooks/cache/
+*.egg-info

@@ -17,6 +17,9 @@ parser.add_argument('module_filepath', type=str,
         help='Filepath to module to use for classification')
 parser.add_argument('--output', type=str, default='output.tsv',
         help='Filepath to write output file.')
+parser.add_argument('--min-genes-per-cell', type=int, default=200,
+        help='The minimun number of genes expressed in a cell in order for it \
+to be classified.')
 
 args = parser.parse_args()
 
@@ -26,7 +29,8 @@ def main():
             var_names='gene_symbols')
 
     logging.info('processing in counts and loading classification module')
-    loaded_pds, loaded_pm = load_from_directory(adata, args.module_filepath)
+    loaded_pds, loaded_pm = load_from_directory(adata, args.module_filepath,
+            min_genes_per_cell=args.min_genes_per_cell)
 
     logging.info('start cell prediction')
     labels, probs = loaded_pm.predict_pollock_dataset(loaded_pds,

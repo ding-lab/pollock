@@ -252,7 +252,7 @@ class PollockDataset(object):
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
         self.prediction_ds = get_tf_prediction_ds(self.prediction_adata, batch_size=1000)
 
-def load_from_directory(adata, model_filepath, batch_size=64):
+def load_from_directory(adata, model_filepath, batch_size=64, min_genes_per_cell=200):
 ##     model = tf.saved_model.load(os.path.join(model_filepath, MODEL_PATH))
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
     genes = np.load(os.path.join(model_filepath, GENES_PATH), allow_pickle=True)
@@ -263,7 +263,7 @@ def load_from_directory(adata, model_filepath, batch_size=64):
     clf = joblib.load(os.path.join(model_filepath, CLASSIFIER_PATH))
 
     prediction_dataset = PollockDataset(adata, batch_size=batch_size, dataset_type='prediction',
-            min_genes=200, min_cells=None, mito_threshold=None,
+            min_genes=min_genes_per_cell, min_cells=None, mito_threshold=None,
             max_n_genes=None, log=True, cpm=True, min_disp=None, standard_scaler=standard_scaler,
             range_scaler=range_scaler, genes=genes, cell_type_encoder=encoder,
             cell_types=cell_types)

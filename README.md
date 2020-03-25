@@ -40,6 +40,7 @@ To see usage with a docker container see the Usage - docker section
 ### Usage
 ```bash
 usage: pollock [-h] [--output OUTPUT]
+               [--min-genes-per-cell MIN_GENES_PER_CELL]
                cellranger_counts_directory module_filepath
 ```
 
@@ -50,6 +51,9 @@ cellranger_counts_directory
   
 module_filepath
   * The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.
+  
+--min-genes-per-cell
+  * Minimum number of genes a cell must express to be considered for prediction. Cells with less than MIN_GENES_PER_CELL will be filtered out. Default is 200.
   
 --output
   * Filepath to write predictions output file.

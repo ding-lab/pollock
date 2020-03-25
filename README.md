@@ -24,9 +24,9 @@ pip install -e pollock
 ```
 NOTE: It is highly recommended that you install pollock in a virtual environment to avoid package versioning conflicts as pollock has many external dependencies. If you want to install inside a conda environment, the installation would look something like the following:
 ```bash
-git clone https://github.com/ding-lab/pollock.git
 conda create -n pollock python=3.7
 conda activate
+git clone https://github.com/ding-lab/pollock.git
 pip install -e pollock
 ```
 
@@ -53,10 +53,10 @@ module_filepath
   * The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.
   
 --min-genes-per-cell
-  * Minimum number of genes a cell must express to be considered for prediction. Cells with less than MIN_GENES_PER_CELL will be filtered out. Default is 200.
+  * Minimum number of genes a cell must express to be considered for prediction with cells with less than MIN_GENES_PER_CELL filtered out. Default is 200.
   
 --output
-  * Filepath to write predictions output file.
+  * Filepath to write predictions output file. Default is output.tsv.
   
 ##### example basic usage
 

@@ -41,13 +41,13 @@ To see usage with a docker container see the Usage - docker section
 ```bash
 usage: pollock [-h] [--output OUTPUT]
                [--min-genes-per-cell MIN_GENES_PER_CELL]
-               cellranger_counts_directory module_filepath
+               counts_10x_filepath module_filepath
 ```
 
 ##### Arguments
 
-cellranger_counts_directory
-  * The 10x counts directory holding the counts matrix file to be predicted (typically at `outs/raw_feature_bc_matrix` in cellranger output directory)
+10x_counts_filepath
+  *  Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx.gz count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
   
 module_filepath
   * The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.
@@ -60,16 +60,21 @@ module_filepath
   
 ##### example basic usage
 
-An example of running the single-cell cesc module
+An example of running the single-cell cesc module with 10x .mtx.gz output
 ```bash
-pollock --output output.tsv </filepath/to/outs/raw_feature_bc_matrix> /diskmnt/Projects/Users/estorrs/pollock/modules/sc_cesc
+pollock --output output.tsv </filepath/to/cellranger/outs/raw_feature_bc_matrix> /diskmnt/Projects/Users/estorrs/pollock/modules/sc_cesc
+```
+
+An example of running the single-cell cesc module with 10x .h5 output
+```bash
+pollock --output output.tsv </filepath/to/cellranger/outs/raw_feature_bc_matrix.h5> /diskmnt/Projects/Users/estorrs/pollock/modules/sc_cesc
 ```
 
 ##### example basic usage within a docker container
 
 An example of running the single-cell cesc module from within a docker container. Note that all filepaths must be absolute filepaths.
 ```bash
-docker run -v </filepath/to/outs/raw_feature_bc_matrix>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock-cpu pollock --output /outputs/output.tsv /inputs /modules/sc_cesc
+docker run -v </filepath/to/cellranger/outs/>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock-cpu pollock --output /outputs/output.tsv /inputs/raw_feature_bc_matrix /modules/sc_cesc
 ```
   
 ### Outputs

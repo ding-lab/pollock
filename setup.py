@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     # $ pip install pollock
     name='pollock',
-    version='0.0.1',
+    version='0.0.3',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -23,23 +23,25 @@ setup(
         'Programming Language :: Python :: 3.7',
     ],
     keywords='single cell classification expression machine learning deep learning',  # Optional
-    packages=find_packages(exclude=['tests']),
+    #packages=find_packages(exclude=['tests']),
+    packages=['pollock'],
     python_requires='>=3.6',
     install_requires=[
-        'joblib>=0.13.2',
-        'matplotlib>=3.1.1',
-        'numpy>=1.17.0',
-        'pandas>=0.25.0',
-        'pytest>=5.0.1',
-        'seaborn>=0.9.0',
-        'scipy>=1.3.0',
-        'scikit-learn>=0.21.3',
-        'tensorflow==2.0.0-beta1'
+        'scanpy==1.4.5.post3',
+        'pandas>=1.0.0',
+        'anndata>=0.7.1',
+        'seaborn>=0.10.0',
+        'scipy>=1.4.1',
+        'scikit-learn>=0.22.1',
+        'tensorflow==2.1.0',
+        'jupyter',
+        'umap-learn>=0.3.10',
+        'loompy>=3.0.6',
         ],
 
     entry_points={  # Optional
         'console_scripts': [
             'pollock=pollock.pollock:main',
         ],
-    },
+   },
 )

@@ -1,0 +1,7 @@
+models/
+data/
+modules/
+
+*.tfcache*
+notebooks/cache/
+*.egg-info

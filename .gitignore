@@ -2,3 +2,14 @@ notebooks/.ipynb_checkpoints/
 *.egg-info/
 *.pyc
 output.tsv
+.DS_Store
+*.tfcache*
+*.pdf
+*.png
+
+data/
+results/
+scratch/
+models/
+figures/
+modules/

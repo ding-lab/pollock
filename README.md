@@ -31,9 +31,9 @@ pip install -e pollock
 ```
 
 ##### docker
-Dockerfiles for running pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock on dockerhub. To pull the latest pollock docker image run the following:
+Dockerfiles for running pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock
+docker pull estorrs/pollock-cpu
 ```
 To see usage with a docker container see the Usage - docker section
 
@@ -69,7 +69,7 @@ pollock --output output.tsv </filepath/to/outs/raw_feature_bc_matrix> /diskmnt/P
 
 An example of running the single-cell cesc module from within a docker container. Note that all filepaths must be absolute filepaths.
 ```bash
-docker run -v </filepath/to/outs/raw_feature_bc_matrix>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock pollock --output /outputs/output.tsv /inputs /modules/sc_cesc
+docker run -v </filepath/to/outs/raw_feature_bc_matrix>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock-cpu pollock --output /outputs/output.tsv /inputs /modules/sc_cesc
 ```
   
 ### Outputs

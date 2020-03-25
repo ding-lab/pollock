@@ -11,4 +11,4 @@ def listfiles(folder, regex=None):
             elif re.findall(regex, os.path.join(root, filename)):
                 yield os.path.join(root, filename)
 
-       
+

@@ -451,7 +451,7 @@ class PollockModel(object):
                 [(pollock_dataset.cell_type_encoder.categories_[0][c], prob) if prob > threshold else ('unknown', prob)
                 for c, prob in zip(output_classes, output_probs)])
 
-        return output_labels, output_probs
+        return output_labels, output_probs, probs
 
     def predict(self, ds):
         X = self.get_cell_embeddings(ds)

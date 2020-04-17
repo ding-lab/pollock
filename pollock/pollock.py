@@ -6,7 +6,7 @@ import pandas as pd
 import scanpy as sc
 
 import pollock
-from pollock import PollockDataset, PollockModel, load_from_directory, write_loom
+from pollock import PollockDataset, PollockModel, load_from_directory, write_loom, save_rds
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
@@ -39,6 +39,10 @@ parser.add_argument('--output', type=str, default='output.tsv',
 parser.add_argument('--min-genes-per-cell', type=int, default=10,
         help='The minimun number of genes expressed in a cell in order for it \
 to be classified. Only used in 10x mode')
+
+parser.add_argument('--output-type', type=str, default='tsv',
+        help='What output type to write. Valid arguments are \
+seurat, scanpy, and txt')
 
 
 args = parser.parse_args()
@@ -74,6 +78,22 @@ def load_scanpy():
 
     return adata
 
+def get_probability_df(labels, label_probs, probs, pds):
+    """Return dataframe with labels and probabliities"""
+    df = pd.DataFrame.from_dict({
+        'cell_id': list(pds.prediction_adata.obs.index),
+        'predicted_cell_type': labels,
+        'predicted_cell_type_probability': label_probs})
+    df = df.set_index('cell_id')
+
+    ## add cell probabilities
+    prob_df = pd.DataFrame(data=probs)
+    prob_df.index = list(loaded_pds.prediction_adata.obs.index)
+    prob_df.columns = [f'probability_{c}' for c in pds.cell_type_encoder.categories_[0]]
+    prob_df.columns = [c.replace(' ', '_') for c in prob_df.columns]
+
+    return pd.concat((df, prob_df), axis=1)
+
 def main():
 
     if args.source_type == 'from_10x':
@@ -91,17 +111,21 @@ def main():
             min_genes_per_cell=args.min_genes_per_cell)
 
     logging.info('start cell prediction')
-    labels, probs = loaded_pm.predict_pollock_dataset(loaded_pds,
+    labels, label_probs, probs = loaded_pm.predict_pollock_dataset(loaded_pds,
             labels=True)
     logging.info('finish cell prediction')
 
-    df = pd.DataFrame.from_dict({
-        'cell_id': list(loaded_pds.prediction_adata.obs.index),
-        'predicted_cell_type': labels,
-        'probability': probs})
 
-    logging.info(f'writing output to {args.output}')
-    df.to_csv(args.output, sep='\t', index=False, header=True)
+    df = get_probability_df(labels, label_probs, probs, loaded_pds)
+
+    if args.output_type == 'txt':
+        logging.info(f'writing tsv output to {args.output}')
+        df.to_csv(args.output, sep='\t', index=True, header=True)
+    elif args.output_type == 'seurat':
+        logging.info(f'writing seurat object to {args.output}')
+
+        save_rds()
+
 
 if __name__ == '__main__':
     main()

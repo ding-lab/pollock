@@ -99,9 +99,11 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
     if min_genes is not None:
         logging.info(f'filtering by min genes: {min_genes}')
         sc.pp.filter_cells(adata, min_genes=min_genes)
+        logging.info(f'genes remaining after filter: {adata.shape[1]}')
     if min_cells is not None:
         logging.info(f'filtering by min cells: {min_cells}')
         sc.pp.filter_genes(adata, min_cells=min_cells)
+        logging.info(f'cells remaining after filter: {adata.shape[0]}')
 
     if mito_threshold is not None or max_n_genes is not None: 
         logging.info('calculating MT and gene counts')

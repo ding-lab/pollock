@@ -177,9 +177,9 @@ def filter_adata_genes(adata, genes):
         X = X.tocsr()
     else:
         X = np.concatenate((X, np.zeros((adata.shape[0], len(missing)))), axis=1)
-    vars = list(adata.var.index) + missing
+    var_index = list(adata.var.index) + missing
     new_adata = anndata.AnnData(X=X, obs=adata.obs)
-    new_adata.var.index = vars
+    new_adata.var.index = var_index
 
     return new_adata[:, genes]
 

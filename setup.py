@@ -1,11 +1,22 @@
 from setuptools import setup, find_packages
+from setuptools.command.install import install
 from os import path
+import subprocess
 
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
+
+## class InstallScanpy(install):
+##     """Post-installation for installation mode."""
+##     def run(self):
+##         subprocess.check_call(('conda', 'install', '-y', '-c', 'bioconda', 'scanpy==1.4.6'))
+##         subprocess.check_call(('conda', 'install', '-y', '-c', 'conda-forge',
+##                 'loompy==2.0.17'))
+##         install.run(self)
+
 
 setup(
     # $ pip install pollock
@@ -27,21 +38,25 @@ setup(
     packages=['pollock'],
     python_requires='>=3.6',
     install_requires=[
-        'scanpy==1.4.5.post3',
+        'scanpy==1.4.6',
         'pandas>=1.0.0',
-        'anndata>=0.7.1',
         'seaborn>=0.10.0',
         'scipy>=1.4.1',
         'scikit-learn>=0.22.1',
         'tensorflow==2.1.0',
         'jupyter',
         'umap-learn>=0.3.10',
-        'loompy>=3.0.6',
+        'loompy==2.0.17',
+        'matplotlib>=3.2.1',
         ],
+##     cmdclass={
+##         'install': InstallScanpy,
+##         },
 
     entry_points={  # Optional
         'console_scripts': [
             'pollock=pollock.pollock:main',
+            'pollock-setup=pollock.pollock_setup:main',
         ],
    },
 )

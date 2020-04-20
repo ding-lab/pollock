@@ -5,6 +5,10 @@ library(Seurat)
 args <- commandArgs()
 out_rds_fp = args[[7]]
 
-seurat_exp <- ReadH5AD(file = args[[6]])
+sce.loom <- connect(filename = args[[6]], mode = "r")
 
-saveRDS(seurat_exp, out_rds_fp)
+sce.seurat <- as.Seurat(sce.loom)
+
+saveRDS(sce.seurat, out_rds_fp)
+
+sce.loom$close_all()

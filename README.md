@@ -1,6 +1,6 @@
 # Pollock
 
-![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/pollock.png)
+![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/polluck.png)
 
 A tool for single cell classification
 
@@ -23,17 +23,18 @@ git clone https://github.com/ding-lab/pollock.git
 pip install -e pollock
 ```
 
+###### Interoperability with Seurat
+Additional installation steps are required for pollock integration with seurat. You must have conda installed to run the below step.
+```bash
+pollock-setup from_seurat
+```
+
 NOTE: It is highly recommended that you install pollock in a virtual environment to avoid package versioning conflicts as pollock has many external dependencies. If you want to install inside a conda environment, the installation would look something like the following:
 ```bash
 conda create -n pollock python=3.7
 conda activate
 git clone https://github.com/ding-lab/pollock.git
 pip install -e pollock
-```
-
-###### Interoperability with Seurat
-Additional installation steps are required for pollock integration with seurat. If you intend to use pollock with Seurat RDS objects you need to run the following additional command. NOTE: Seurat does not always play nicely with CUDA drivers, so if you are installing on a machine with GPUs Seurat interoperability may not be possible.
-```bash
 pollock-setup from_seurat
 ```
 
@@ -56,7 +57,8 @@ usage: pollock [-h] [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
 
 #### Arguments
 
-
+source_type
+  * Which type of input you plan to use. Possible source types are the following: from_seurat, from_scanpy, from_10x.
   
 module_filepath
   * Filepath to module to use for classification. The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, `sc_myeloma` and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.
@@ -65,8 +67,6 @@ module_filepath
 
 --seurat-rds-filepath SEURAT_RDS_FILEPATH
   * A saved Seurat RDS object to use for classification. Seurat experiment matrix must be raw expression counts (i.e. not normalized)
-  
-
   
 --min-genes-per-cell MIN_GENES_PER_CELL
   * The minimun number of genes expressed in a cell in order for it to be classified. Only used in 10x mode
@@ -114,9 +114,11 @@ docker pull estorrs/pollock-cpu
 
 When using docker, input and ouput file directories need to be mounted as a volume using the docker -v argument.
 
-An example of running the single-cell cesc module from within a docker container. Note filepaths in the -v flag must be absolute.
+An example of running the single-cell cesc module from within a docker container. Sections outlined by <> need to be replaced. Note filepaths in the -v flag must be absolute.
+
+ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </filepath/to/folder/with/seurat/rds>:/inputs -v </path/to/output_dir>:/outputs -v /diskmnt/Projects/Users/estorrs/pollock/modules:/modules -t estorrs/pollock-cpu pollock from_seurat /diskmnt/Projects/Users/estorrs/pollock/modules/sc_myeloma --seurat-rds-filepath <filename.rds> --output-prefix output --output-type seurat
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu pollock from_seurat /modules/sc_myeloma --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type seurat
 ```
 
 

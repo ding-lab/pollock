@@ -6,6 +6,7 @@ output.tsv
 *.tfcache*
 
 data/
+tests/data/
 results/
 scratch/
 models/

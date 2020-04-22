@@ -81,6 +81,9 @@ def load_scanpy():
 def save_seurat(adata, output_fp):
     """Save seurat RDS from adata"""
     temp_fp = 'temp.loom'
+    ## save cell and feature id so loom recongnizes them
+    adata.obs['CellID'] = list(adata.obs.index)
+    adata.var['Gene'] = list(adata.var.index)
     adata.write_loom(temp_fp)
     save_rds(temp_fp, output_fp)
     os.remove(temp_fp)

@@ -12,4 +12,6 @@ WORKDIR /pollock
 
 RUN pip install .
 
+RUN pollock-setup from_seurat
+
 CMD /bin/bash

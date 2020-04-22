@@ -99,9 +99,11 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
     if min_genes is not None:
         logging.info(f'filtering by min genes: {min_genes}')
         sc.pp.filter_cells(adata, min_genes=min_genes)
+        logging.info(f'genes remaining after filter: {adata.shape[1]}')
     if min_cells is not None:
         logging.info(f'filtering by min cells: {min_cells}')
         sc.pp.filter_genes(adata, min_cells=min_cells)
+        logging.info(f'cells remaining after filter: {adata.shape[0]}')
 
     if mito_threshold is not None or max_n_genes is not None: 
         logging.info('calculating MT and gene counts')
@@ -175,9 +177,9 @@ def filter_adata_genes(adata, genes):
         X = X.tocsr()
     else:
         X = np.concatenate((X, np.zeros((adata.shape[0], len(missing)))), axis=1)
-    vars = list(adata.var.index) + missing
+    var_index = list(adata.var.index) + missing
     new_adata = anndata.AnnData(X=X, obs=adata.obs)
-    new_adata.var.index = vars
+    new_adata.var.index = var_index
 
     return new_adata[:, genes]
 
@@ -449,7 +451,7 @@ class PollockModel(object):
                 [(pollock_dataset.cell_type_encoder.categories_[0][c], prob) if prob > threshold else ('unknown', prob)
                 for c, prob in zip(output_classes, output_probs)])
 
-        return output_labels, output_probs
+        return output_labels, output_probs, probs
 
     def predict(self, ds):
         X = self.get_cell_embeddings(ds)

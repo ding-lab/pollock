@@ -1,7 +1,11 @@
 models/
 data/
 modules/
+tests/data/
 
 *.tfcache*
 notebooks/cache/
 *.egg-info
+*.egg-info/
+pollock.egg-info
+pollock.egg-info/

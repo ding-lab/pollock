@@ -48,6 +48,7 @@ setup(
         'umap-learn>=0.3.10',
         'loompy==2.0.17',
         'matplotlib>=3.2.1',
+#        'anndata2ri==1.0.2',
         ],
 ##     cmdclass={
 ##         'install': InstallScanpy,

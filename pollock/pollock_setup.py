@@ -2,8 +2,6 @@ import argparse
 import logging
 import subprocess
 
-#from pollock import install_seurat
-
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
 parser = argparse.ArgumentParser()
@@ -18,16 +16,12 @@ def setup_seurat():
     Note: These dont always play nicely with CUDA
     """
     logging.info('installing packages for seurat conversion')
-#    subprocess.check_output(('conda', 'install', '-y', 'r-base'))
     logging.info('installing packages from bioconda: loomR, scater, seurat')
-##     subprocess.check_output(('conda', 'install', '-y', '-c', 'bioconda', 'r-loom'))
-##     subprocess.check_output(('conda', 'install', '-y', '-c', 'bioconda', 'bioconductor-scater', 'r-loom'))
-##     subprocess.check_output(('conda', 'install', '-y', '-c', 'bioconda', 'r-seurat==3.0.2',
-##             'bioconductor-scater', 'r-loom'))
     subprocess.check_output(('conda', 'install', '-y', '-c', 'bioconda', 'r-seurat==3.0.2',
         'bioconductor-scater==1.14.0', 'r-loom==0.2.0.2'))
 
-##     install_seurat()
+    logging.info('installing anndata2ri')
+    subprocess.check_output(('pip', 'install', 'anndata2ri==1.0.2'))
 
     logging.info('finished installation')
 

@@ -5,8 +5,8 @@ import subprocess
 
 import logging
 
-CONVERT_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-        'convert_seurat.R')
+## CONVERT_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##         'convert_seurat.R')
 TO_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
         'to_seurat.R')
 INSTALL_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
@@ -22,11 +22,42 @@ def listfiles(folder, regex=None):
                 yield os.path.join(root, filename)
 
 
-def write_loom(rds_fp, loom_fp):
+## def write_loom(rds_fp, loom_fp):
+##     """Convert seurat rds file to loom file"""
+##     output = subprocess.check_output(
+##             ('Rscript', CONVERT_SEURAT_SCRIPT, rds_fp, loom_fp))
+##     logging.info(output)
+## def write_loom(rds_fp, loom_fp):
+##     """Convert seurat rds file to loom file"""
+##     output = subprocess.check_output(
+##             ('Rscript', CONVERT_SEURAT_SCRIPT, rds_fp, loom_fp))
+##     command = r'as.SingleCellExperiment(readRDS({rds_fp}))'
+## ##     adata = r(r'as.SingleCellExperiment(readRDS("/diskmnt/Projects/Users/estorrs/single_cell_data/myeloma/rds/scRNA/25183_processed_celltype.rds"))')
+##     adata = r(command)
+##     return adata
+
+def read_rds(rds_fp):
     """Convert seurat rds file to loom file"""
-    output = subprocess.check_output(
-            ('Rscript', CONVERT_SEURAT_SCRIPT, rds_fp, loom_fp))
-    logging.info(output)
+    import anndata2ri
+    from rpy2.robjects import r
+    anndata2ri.activate()
+
+    r('library(Seurat)')
+    command = f'as.SingleCellExperiment(readRDS("{rds_fp}"))'
+    adata = r(command)
+
+    return adata
+
+## def save_rds(loom_fp, rds_fp):
+##     """"""
+##     import anndata2ri
+##     from rpy2.robjects import r
+##     anndata2ri.activate()
+## 
+##     r('library(Seurat)')
+##     command = f'as.SingleCellExperiment(readRDS("{rds_fp}"))'
+
+
 
 def save_rds(loom_fp, rds_fp):
     """"""
@@ -34,8 +65,8 @@ def save_rds(loom_fp, rds_fp):
             ('Rscript', TO_SEURAT_SCRIPT, loom_fp, rds_fp))
     logging.info(output)
 
-def install_seurat():
-    """"""
-    output = subprocess.check_output(
-            ('Rscript', INSTALL_SEURAT_SCRIPT))
-    logging.info(output)
+## def install_seurat():
+##     """"""
+##     output = subprocess.check_output(
+##             ('Rscript', INSTALL_SEURAT_SCRIPT))
+##     logging.info(output)

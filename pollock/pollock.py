@@ -6,7 +6,7 @@ import pandas as pd
 import scanpy as sc
 
 import pollock
-from pollock import PollockDataset, PollockModel, load_from_directory, write_loom, save_rds
+from pollock import PollockDataset, PollockModel, load_from_directory, save_rds, read_rds
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
@@ -63,11 +63,7 @@ def load_10x():
 def load_seurat():
     """Load seurat RDS and convert to scanpy"""
     logging.info('loading seurat rds')
-    temp_fp = 'temp.loom'
-    logging.info('converting seurat to scanpy')
-    write_loom(args.seurat_rds_filepath, temp_fp)
-    adata = sc.read_loom(temp_fp)
-    os.remove(temp_fp)
+    adata = read_rds(args.seurat_rds_filepath)
 
     return adata
 

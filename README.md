@@ -31,9 +31,9 @@ pollock-setup from_seurat
 
 NOTE: It is highly recommended that you install pollock in a virtual environment to avoid package versioning conflicts as pollock has many external dependencies. If you want to install inside a conda environment, the installation would look something like the following:
 ```bash
+git clone https://github.com/ding-lab/pollock.git
 conda create -n pollock python=3.7
 conda activate
-git clone https://github.com/ding-lab/pollock.git
 pip install -e pollock
 pollock-setup from_seurat
 ```
@@ -57,8 +57,10 @@ usage: pollock [-h] [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
 
 #### Arguments
 
+
 source_type
-  * Which type of input you plan to use. Possible source types are the following: from_seurat, from_scanpy, from_10x.
+  * Input source type. Possible values are: from_seurat, from_10x, from_scanpy.
+
   
 module_filepath
   * Filepath to module to use for classification. The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`. Available modules at this time are the following: `sc_brca`, `sc_cesc`, `sc_hnsc`, `sc_pdac`, `sc_myeloma` and `sn_ccrcc`. More general purpose modules will be available soon, but for now the available modules are seperated by technology and tumor/tissue type.
@@ -68,6 +70,13 @@ module_filepath
 --seurat-rds-filepath SEURAT_RDS_FILEPATH
   * A saved Seurat RDS object to use for classification. Seurat experiment matrix must be raw expression counts (i.e. not normalized)
   
+
+--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH
+  * A saved .h5ad file to use for classification. scanpy data matrix must be raw expression counts (i.e. not normalized)
+  
+--counts-10x-filepath COUNTS_10X_FILEPATH
+  * Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
+
 --min-genes-per-cell MIN_GENES_PER_CELL
   * The minimun number of genes expressed in a cell in order for it to be classified. Only used in 10x mode
   
@@ -120,5 +129,13 @@ ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/User
 ```bash
 docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu pollock from_seurat /modules/sc_myeloma --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type seurat
 ```
+  
+## Outputs
 
+There are three possible output types:
+  * txt : tab seperated text file
+  * seurat: a .rds seurat object
+  * scanpy: a .h5ad file that can be loaded with scanpy
+  
+The following fields will be included in the output: predicted cell type, predicted cell type probability, and probabilities for each potential cell type in the model
 

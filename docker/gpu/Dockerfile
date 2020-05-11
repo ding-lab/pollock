@@ -1,5 +1,6 @@
-FROM python:3.6
-FROM nvidia/cuda:10.2-base
+#FROM python:3.6
+## FROM nvidia/cuda:10.2-base
+FROM tensorflow/tensorflow:latest-gpu
 
 RUN apt-get update && apt-get install -y vim wget curl git
 

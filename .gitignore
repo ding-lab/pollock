@@ -4,6 +4,8 @@ notebooks/.ipynb_checkpoints/
 output.tsv
 .DS_Store
 *.tfcache*
+.RData
+.Rhistory
 
 data/
 tests/data/

@@ -21,13 +21,12 @@ import scanpy as sc
 from sklearn.metrics import classification_report
 from sklearn.preprocessing import StandardScaler, OrdinalEncoder, MinMaxScaler, MaxAbsScaler
 from sklearn.ensemble import RandomForestClassifier
+import umap
 
 from tensorflow.keras.models import Sequential
 import tensorflow as tf
 
-## import pollock.preprocessing.preprocessing as pollock_pp
 import pollock.models.analysis as pollock_analysis
-#import pollock.models.analysis as pollock_analysis
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
@@ -139,10 +138,6 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
 
 
     logging.info('scaling data')
-##     sc.pp.scale(adata, max_value=None)
-
-##     if normalize_samples:
-##         adata.X = adata.X / np.sum(adata.X, axis=1).reshape(-1, 1) 
 
     if standard_scaler is None:
         standard_scaler = StandardScaler(with_mean=False, with_std=True)
@@ -154,7 +149,7 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
         range_scaler = MaxAbsScaler()
         adata.X = range_scaler.fit_transform(adata.X)
     else:
-        ## see if this works, some minmaxscalers were saved with model and wont work on sparse
+        ## some minmaxscalers were saved with model and wont work on sparse
         if 'maxabsscaler' not in str(type(range_scaler)).lower():
             range_scaler = MaxAbsScaler()
             range_scaler.fit(adata.X)
@@ -163,13 +158,12 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
 
     return adata, standard_scaler, range_scaler
 
-
 def filter_adata_genes(adata, genes):
-    logging.info('filtering for training genes')
+    logging.info('filtering for genes in training set')
     training_genes = set(genes)
     prediction_genes = set(adata.var.index)
     missing = list(training_genes - prediction_genes)
-    logging.info(f'{len(missing)} genes missing from prediction set')
+    logging.info(f'{len(missing)} genes in training set are missing from prediction set')
 
     X = adata.X
     if 'sparse' in str(type(X)).lower():
@@ -185,8 +179,8 @@ def filter_adata_genes(adata, genes):
 
 class PollockDataset(object):
     def __init__(self, adata, cell_type_key='ClusterName', n_per_cell_type=500,
-            batch_size=64, dataset_type='training', min_genes=200, min_cells=3, mito_threshold=.2,
-            max_n_genes=None, log=True, cpm=True, min_disp=.2, standard_scaler=None,
+            batch_size=64, dataset_type='training', min_genes=10, min_cells=3, mito_threshold=None,
+            max_n_genes=None, log=True, cpm=False, min_disp=None, standard_scaler=None,
             range_scaler=None, cell_type_encoder=None, genes=None, cell_types=None):
 
         self.adata = adata
@@ -330,19 +324,6 @@ class BVAE(tf.keras.Model):
     
         return logits
 
-##     def predict(self, x):
-##         mean, logvar = self.encode(x)
-##         z = self.reparameterize(mean, logvar)
-##         x_logit = self.decode(z)
-##         return x_logit
-
-##     def call(self, x):
-##         mean, logvar = self.encode(x)
-##         #z = self.reparameterize(mean, logvar)
-##         x_logit = self.sample()
-##         return x_logit
-
-
 def log_normal_pdf(sample, mean, logvar, raxis=1):
     log2pi = tf.math.log(2. * np.pi)
     return tf.reduce_sum(
@@ -396,6 +377,7 @@ class PollockModel(object):
 
         self.clf = clf
         self.val_losses = []
+        self.train_losses = []
 
     def get_cell_embeddings(self, ds):
         embeddings = None
@@ -409,6 +391,10 @@ class PollockModel(object):
 
         return embeddings
 
+    def get_umap_cell_embeddings(self, ds):
+        embeddings = self.get_cell_embeddings(ds)
+        return umap.UMAP().fit_transform(embeddings)
+
     def fit(self, pollock_dataset, epochs=10):
         for epoch in range(1, epochs + 1):
             start_time = time.time()
@@ -416,18 +402,18 @@ class PollockModel(object):
                 compute_apply_gradients(self.model, train_x, self.optimizer, alpha=self.alpha)
             end_time = time.time()
 
-            loss = tf.keras.metrics.Mean()
-            for test_x in pollock_dataset.val_ds:
-                loss(compute_loss(self.model, test_x, alpha=self.alpha))
+            train_loss = tf.keras.metrics.Mean()
+            for train_x in pollock_dataset.train_ds:
+                train_loss(compute_loss(self.model, train_x, alpha=self.alpha))
 
-            logging.info(f'epoch: {epoch}, val loss: {loss.result()}') 
-            self.val_losses.append(loss.result().numpy())
+            val_loss = tf.keras.metrics.Mean()
+            for test_x in pollock_dataset.val_ds.take(10):
+                val_loss(compute_loss(self.model, test_x, alpha=self.alpha))
 
-##         ## you need to call model.predict so it saves correctly later
-##         for x in pollock_dataset.train_ds:
-##             #self.model.predict(x)
-##             self.model._set_inputs(x)
-##             break
+            logging.info(f'epoch: {epoch}, train loss: {train_loss.result()}, \
+val loss: {val_loss.result()}') 
+            self.train_losses.append(train_loss.result().numpy())
+            self.val_losses.append(val_loss.result().numpy())
 
         train_batches = batch_adata(pollock_dataset.train_adata, n=1000)
         X_train = self.get_cell_embeddings(train_batches)
@@ -437,7 +423,6 @@ class PollockModel(object):
         X_val = self.get_cell_embeddings(val_batches)
 
     def predict_pollock_dataset(self, pollock_dataset, labels=False, threshold=0.):
-##         prediction_batches = batch_adata(pollock_dataset.prediction_adata, n=1000)
         prediction_batches = pollock_dataset.prediction_ds
 
         if not labels:
@@ -465,7 +450,6 @@ class PollockModel(object):
             os.mkdir(filepath)
 
         model_fp = os.path.join(filepath, MODEL_PATH)
-##         tf.saved_model.save(self.model, model_fp)
         self.model.save_weights(model_fp)
         np.save(os.path.join(filepath, CELL_TYPES_PATH),
                 np.asarray(pollock_training_dataset.cell_types))

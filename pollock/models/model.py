@@ -98,11 +98,11 @@ def process_from_counts(adata, min_genes=200, min_cells=3, mito_threshold=.2, ma
     if min_genes is not None:
         logging.info(f'filtering by min genes: {min_genes}')
         sc.pp.filter_cells(adata, min_genes=min_genes)
-        logging.info(f'genes remaining after filter: {adata.shape[1]}')
+        logging.info(f'cells remaining after filter: {adata.shape[0]}')
     if min_cells is not None:
         logging.info(f'filtering by min cells: {min_cells}')
         sc.pp.filter_genes(adata, min_cells=min_cells)
-        logging.info(f'cells remaining after filter: {adata.shape[0]}')
+        logging.info(f'genes remaining after filter: {adata.shape[1]}')
 
     if mito_threshold is not None or max_n_genes is not None: 
         logging.info('calculating MT and gene counts')
@@ -265,6 +265,7 @@ def load_from_directory(adata, model_filepath, batch_size=64, min_genes_per_cell
             cell_types=cell_types)
 
     pollock_model = PollockModel(cell_types, input_shape=len(genes),
+            latent_dim=summary['model_parameters']['latent_dim'],
             model=os.path.join(model_filepath, MODEL_PATH), summary=summary, clf=clf)
 
     return prediction_dataset, pollock_model
@@ -285,9 +286,9 @@ class BVAE(tf.keras.Model):
         self.inference_net = tf.keras.Sequential(
             [
                 tf.keras.layers.InputLayer(input_shape=(input_size,)),
-                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dense(1000, activation='relu'),
                 tf.keras.layers.Dropout(.2),
-                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dense(1000, activation='relu'),
                 tf.keras.layers.Dropout(.2),
                 tf.keras.layers.Dense(latent_dim + latent_dim),
             ])
@@ -295,9 +296,9 @@ class BVAE(tf.keras.Model):
         self.generative_net = tf.keras.Sequential(
             [
                 tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
-                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dense(1000, activation='relu'),
                 tf.keras.layers.Dropout(.2),
-                tf.keras.layers.Dense(800, activation='relu'),
+                tf.keras.layers.Dense(1000, activation='relu'),
                 tf.keras.layers.Dropout(.2),
                 tf.keras.layers.Dense(input_size),
             ])
@@ -342,12 +343,22 @@ def compute_loss(model, x, alpha=0.01):
     overall_loss = tf.reduce_mean(reconstruction_loss + alpha * kl_loss)
     return overall_loss
 
-@tf.function
-def compute_apply_gradients(model, x, optimizer, alpha=.01):
-    with tf.GradientTape() as tape:
-        loss = compute_loss(model, x, alpha=alpha)
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+## @tf.function
+## def compute_apply_gradients(model, x, optimizer, alpha=.01):
+##     with tf.GradientTape() as tape:
+##         loss = compute_loss(model, x, alpha=alpha)
+##     gradients = tape.gradient(loss, model.trainable_variables)
+##     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+def get_compute_apply_gradients():
+    @tf.function
+    def cag(model, x, optimizer, alpha=.01):
+        with tf.GradientTape() as tape:
+            loss = compute_loss(model, x, alpha=alpha)
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    return cag
+compute_apply_gradients = get_compute_apply_gradients()
 
 def batch_adata(adata, n=1000):
     if 'sparse' in str(type(adata.X)).lower():
@@ -361,7 +372,7 @@ class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4,
             summary=None, alpha=.1,
             latent_dim=100, clf=None):
-##         tf.keras.backend.clear_session()
+        tf.keras.backend.clear_session()
         self.model = BVAE(latent_dim, input_shape)
         if model is not None:
             self.model.load_weights(model)
@@ -372,12 +383,21 @@ class PollockModel(object):
         self.class_names = class_names
         self.summary = summary
         self.alpha = alpha
+        self.latent_dim = latent_dim
         self.lr = learning_rate
         self.optimizer = tf.keras.optimizers.Adam(self.lr)
 
         self.clf = clf
         self.val_losses = []
         self.train_losses = []
+        self.val_accuracies = []
+        self.train_accuracies = []
+        self.cell_type_train_losses = {c:[] for c in self.class_names}
+        self.cell_type_val_losses = {c:[] for c in self.class_names}
+        self.cell_type_train_accuracies = {c:[] for c in self.class_names}
+        self.cell_type_val_accuracies = {c:[] for c in self.class_names}
+
+
 
     def get_cell_embeddings(self, ds):
         embeddings = None
@@ -395,7 +415,33 @@ class PollockModel(object):
         embeddings = self.get_cell_embeddings(ds)
         return umap.UMAP().fit_transform(embeddings)
 
-    def fit(self, pollock_dataset, epochs=10):
+    def get_cell_type_loss(self, cell_adata):
+        ## do training
+        cell_ids = np.asarray(
+                random.sample(list(cell_adata.obs.index), min(cell_adata.shape[0], 100)))
+        if 'sparse' in str(type(cell_adata.X)).lower():
+            X = cell_adata[cell_ids].X.toarray()
+        else:
+            X = cell_adata[cell_ids].X
+        loss = tf.keras.metrics.Mean()
+        loss(compute_loss(self.model, X, alpha=self.alpha))
+        return loss.result().numpy()
+
+    def get_cell_type_accuracy(self, X, y, clf=None):
+        X = self.get_cell_embeddings(X)
+        if clf is None:
+            clf = RandomForestClassifier(n_estimators=100)
+            clf.fit(X, y)
+
+        probs = clf.predict_proba(X)
+        output_classes = np.argmax(probs, axis=1).flatten()
+        report = classification_report(y,
+                output_classes, labels=list(range(len(self.class_names))),
+                target_names=self.class_names, output_dict=True, zero_division=0)
+        return clf, report
+
+    def fit(self, pollock_dataset, epochs=10, max_metric_batches=10, metric_epoch_interval=5):
+        compute_apply_gradients = get_compute_apply_gradients()
         for epoch in range(1, epochs + 1):
             start_time = time.time()
             for train_x in pollock_dataset.train_ds:
@@ -407,15 +453,61 @@ class PollockModel(object):
                 train_loss(compute_loss(self.model, train_x, alpha=self.alpha))
 
             val_loss = tf.keras.metrics.Mean()
-            for test_x in pollock_dataset.val_ds.take(10):
-                val_loss(compute_loss(self.model, test_x, alpha=self.alpha))
+            ## only take some of validation dataset to avoid unnecessarilly long model training times
+            if max_metric_batches is None:
+                for test_x in pollock_dataset.val_ds:
+                    val_loss(compute_loss(self.model, test_x, alpha=self.alpha))
+            else:
+                for test_x in pollock_dataset.val_ds.take(max_metric_batches):
+                    val_loss(compute_loss(self.model, test_x, alpha=self.alpha))
+
+            if epoch - 1 % metric_epoch_interval == 0:
+    
+                ## get losses for each cell type
+                ## randomly taking min(100, n_cells) to keep running time down
+                for cell_type in self.class_names:
+                    ## do training
+                    cell_adata = pollock_dataset.train_adata[pollock_dataset.train_adata.obs[pollock_dataset.cell_type_key]==cell_type]
+                    self.cell_type_train_losses[cell_type].append(self.get_cell_type_loss(cell_adata))
+    
+                    ## do validation
+                    cell_adata = pollock_dataset.val_adata[pollock_dataset.val_adata.obs[pollock_dataset.cell_type_key]==cell_type]
+                    self.cell_type_val_losses[cell_type].append(self.get_cell_type_loss(cell_adata))
+    
+                ## do accuracies
+                adata, _ = balancedish_training_generator(pollock_dataset.train_adata,
+                        pollock_dataset.cell_type_key, n_per_cell_type=100)
+                y = pollock_dataset.cell_type_encoder.transform(
+                        adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
+                            (-1, 1))).flatten()
+                X = batch_adata(adata, n=pollock_dataset.batch_size)
+                X, y = X[:max_metric_batches], y[:max_metric_batches*pollock_dataset.batch_size]
+                clf, report = self.get_cell_type_accuracy(X, y,
+                        clf=None)
+                self.train_accuracies.append(report['accuracy'])
+                for cell_type in self.class_names: 
+                    self.cell_type_train_accuracies[cell_type].append(report[cell_type]['f1-score'])
+        
+                adata, _ = balancedish_training_generator(pollock_dataset.val_adata,
+                        pollock_dataset.cell_type_key, n_per_cell_type=100)
+                y = pollock_dataset.cell_type_encoder.transform(
+                        adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
+                            (-1, 1))).flatten()
+                X = batch_adata(adata, n=pollock_dataset.batch_size)
+                X, y = X[:max_metric_batches], y[:max_metric_batches*pollock_dataset.batch_size]
+                _, report = self.get_cell_type_accuracy(X, y,
+                        clf=clf)
+                self.val_accuracies.append(report['accuracy'])
+                for cell_type in self.class_names: 
+                    self.cell_type_val_accuracies[cell_type].append(report[cell_type]['f1-score'])
 
             logging.info(f'epoch: {epoch}, train loss: {train_loss.result()}, \
 val loss: {val_loss.result()}') 
             self.train_losses.append(train_loss.result().numpy())
             self.val_losses.append(val_loss.result().numpy())
 
-        train_batches = batch_adata(pollock_dataset.train_adata, n=1000)
+        train_batches = batch_adata(pollock_dataset.train_adata,
+                n=pollock_dataset.batch_size)
         X_train = self.get_cell_embeddings(train_batches)
         self.clf.fit(X_train, pollock_dataset.y_train)
 
@@ -465,7 +557,23 @@ val loss: {val_loss.result()}')
         else:
             d = {}
 
-        d['history'] = {'validation_losses': self.val_losses}
+        d['history'] = {
+                'train_losses': self.train_losses,
+                'validation_losses': self.val_losses,
+                'train_accuracies': self.train_losses,
+                'validation_accuracies': self.val_losses,
+                'cell_type_train_losses': self.cell_type_train_losses,
+                'cell_type_val_losses': self.cell_type_val_losses,
+                'cell_type_train_accuracies': self.cell_type_train_accuracies,
+                'cell_type_val_accuracies': self.cell_type_val_accuracies,
+                }
+
+        d['model_parameters'] = {
+                'alpha': self.alpha,
+                'learning_rate': self.lr,
+                'latent_dim': self.latent_dim,
+                'cell_types': self.class_names
+                }
 
         train_batches = batch_adata(pollock_training_dataset.train_adata, n=1000)
 ##         val_batches = batch_adata(pollock_training_dataset.val_adata, n=1000)

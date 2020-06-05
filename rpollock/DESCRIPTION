@@ -1,0 +1,13 @@
+Package: rpollock
+Title: Single cell classification with deep learning
+Version: 0.0.5
+Authors@R: 
+    person(given = "Erik",
+           family = "Storrs",
+           role = c("aut", "cre"),
+           email = "estorrs@wustl.edu",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Single cell classification
+License: MIT
+Encoding: UTF-8
+LazyData: true

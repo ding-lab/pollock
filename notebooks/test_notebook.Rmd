@@ -1,0 +1,70 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library('Seurat')
+```
+
+```{r}
+devtools::load_all('../rpollock')
+```
+
+
+
+```{r}
+pbmc = readRDS(('../tests/data/247669_processed.rds'))
+pbmc
+```
+
+```{r}
+fit_model(pbmc@assays$RNA@counts, pbmc@meta.data$seurat_clusters, '../tests/data/test_module')
+```
+
+```{r}
+preds = predict_cell_types(pbmc@assays$RNA@counts, '../tests/data/HTAN_breast_v9/')
+preds
+```
+
+
+```{r}
+pbmc@assays$RNA
+```
+
+```{r}
+pbmc@assays$SCT
+```
+
+
+```{r}
+df = as.data.frame(pbmc@assays$RNA@counts)
+df
+```
+
+```{r}
+ls = pbmc@meta.data$seurat_clusters
+class(ls)
+as.array(ls)
+```
+
+
+```{r}
+pollock = reticulate::import('pollock')
+pollock
+```
+
+
+```{r}
+preds = pollock$wrappers$rwrappers$predict_from_dataframe(df,
+                                                  '../tests/data/HTAN_breast_v9/')
+# pollock$wrappers$rwrappers$predict_from_dataframe
+```
+
+```{r}
+preds
+```

@@ -6,9 +6,15 @@ output.tsv
 *.tfcache*
 .RData
 .Rhistory
+deploy.sh
 
+conda_builds/
+dinglab-pollock/
+build/
+dist/
 data/
 tests/data/
+tests/outputs/
 results/
 scratch/
 models/

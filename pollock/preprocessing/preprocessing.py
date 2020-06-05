@@ -7,10 +7,10 @@ import logging
 
 ## CONVERT_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
 ##         'convert_seurat.R')
-TO_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-        'to_seurat.R')
-INSTALL_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-        'install_seurat.R')
+## TO_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##         'to_seurat.R')
+## INSTALL_SEURAT_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##         'install_seurat.R')
 
 def listfiles(folder, regex=None):
     """Return all files with the given regex in the given folder structure"""
@@ -48,6 +48,33 @@ def read_rds(rds_fp):
 
     return adata
 
+## def save_rds(h5ad_fp, rds_fp):
+##     import anndata2ri
+##     from rpy2.robjects import r
+##     anndata2ri.activate()
+## 
+##     r('library(Seurat)')
+##     command = f'saveRDS(ReadH5AD("{h5ad_fp}"), file="{rds_fp}")'
+##     print(command)
+##     r(command)
+
+## def save_rds(rds_fp):
+##     """Convert seurat rds file to loom file"""
+##     import anndata2ri
+##     from rpy2.robjects import r
+##     anndata2ri.activate()
+## 
+##     adata_sce = 
+## 
+##     r('library(Seurat)')
+## 
+## 
+## 
+##     command = f'as.SingleCellExperiment(readRDS("{rds_fp}"))'
+##     adata = r(command)
+## 
+##     return adata
+
 ## def save_rds(loom_fp, rds_fp):
 ##     """"""
 ##     import anndata2ri
@@ -59,11 +86,11 @@ def read_rds(rds_fp):
 
 
 
-def save_rds(loom_fp, rds_fp):
-    """"""
-    output = subprocess.check_output(
-            ('Rscript', TO_SEURAT_SCRIPT, loom_fp, rds_fp))
-    logging.info(output)
+## def save_rds(loom_fp, rds_fp):
+##     """"""
+##     output = subprocess.check_output(
+##             ('Rscript', TO_SEURAT_SCRIPT, loom_fp, rds_fp))
+##     logging.info(output)
 
 ## def install_seurat():
 ##     """"""

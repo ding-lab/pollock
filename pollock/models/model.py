@@ -264,8 +264,9 @@ def load_from_directory(adata, model_filepath, batch_size=64, min_genes_per_cell
             range_scaler=range_scaler, genes=genes, cell_type_encoder=encoder,
             cell_types=cell_types)
 
+    latent_dim = summary['model_parameters']['latent_dim'] if 'model_parameters' in summary else 100
     pollock_model = PollockModel(cell_types, input_shape=len(genes),
-            latent_dim=summary['model_parameters']['latent_dim'],
+            latent_dim=latent_dim,
             model=os.path.join(model_filepath, MODEL_PATH), summary=summary, clf=clf)
 
     return prediction_dataset, pollock_model

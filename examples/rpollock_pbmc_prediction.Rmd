@@ -7,37 +7,76 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Import libraries
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The first time you use rpollock, you may need to specify the path of the python executable for reticulate. To do this run the following code to find the location of you're python installation.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{bash}
+which -a python
+```
+
+then specify it by running the following with the path to your python executable.
 
 ```{r}
-reticulate::use_python("/Users/erikstorrs/miniconda3/envs/test3/bin/python")
+reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock/bin/python")
 ```
 
 
+import seurat and rpollock
 
 ```{r}
 library('Seurat')
 library('rpollock')
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
+## Load in RDS object
+This PBMC RDS object is the RDS object produced after following the [Seurat pbmc 3k clustering tutorial](https://satijalab.org/seurat/v3.1/pbmc3k_tutorial.html)
 
 ```{r}
-pbmc = readRDS(('../tests/data/247669_processed.rds'))
+pbmc = readRDS(('data/pbmc.rds'))
 pbmc
 ```
-```{r}
-fit_model(pbmc@assays$RNA@counts, pbmc@meta.data$seurat_clusters, '../tests/data/test_module')
-```
+
 
 ```{r}
-predictions = predict_cell_types(pbmc@assays$RNA@counts, '../tests/data/test_module/')
+DimPlot(pbmc, reduction = "umap")
+```
+
+
+  - 
+```{r}
+head(pbmc@active.ident)
+```
+
+the pollock create_module function takes the following as input
+  - RNA expression matrix. Note that it takes raw, unnormalized RNA expression counts. Typically this is stored at $assays$RNA@counts in seurat objects
+  - A vector/list of cell types. The each position in the list corresponds to each cell in the expression matrix
+  - alpha
+    - this parameter controls how regularized the BVAE is. .0001 is usually a good value. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+  - latent_dim
+    - the shape of the latent dim in the BVAE. In general 25 is a good starting point. This number is analgous to the number of principle components in a traditional pca decomposition.
+  - epochs
+    - the number of epochs the neural net should train for. typically between 25-100.
+  - n_per_cell_type
+    - number of cells per cell type that should be included in the training data. For smaller datasets like this one 100 is usually sufficient. For larger datasets it can be helpful to increase the number of cells to 500-2k range.
+
+```{r}
+create_module(pbmc@assays$RNA@counts, pbmc@active.ident, './pbmc3k', alpha=.0001, latent_dim=25, epochs=25, n_per_cell_type=100)
+```
+
+there should now be a module named pbmc3k stored in the current working directory.
+
+now lets use it to make some predictions (here we just use the same dataset over again, but it could be applied to any single cell expression dataset).
+
+as arguments the predict_cell_types function takes an expression matrix of raw gene counts (similar to the create_module function above), and the filepath to the module to use for cell type prediction.
+
+the predict_cell_types frunction returns a dataframe of predicted cell type labels, probabilities associated with those labels, and probabilities for each of the possible cell types.
+
+```{r}
+predictions = predict_cell_types(pbmc@assays$RNA@counts, './pbmc3k')
 
 predictions
 ```
+
+
+

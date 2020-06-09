@@ -47,12 +47,12 @@ def fit_from_dataframe(df, labels, output_filepath, n_per_cell_type=500,
     adata.var.index = df.index.to_list()
 
     pds = PollockDataset(adata.copy(), cell_type_key='cell_type',
-            n_per_cell_type=n_per_cell_type,
+            n_per_cell_type=int(n_per_cell_type),
             batch_size=64, dataset_type='training', log=True)
 
     pm = PollockModel(pds.cell_types, pds.train_adata.shape[1],
-            alpha=alpha, latent_dim=latent_dim)
+            alpha=alpha, latent_dim=int(latent_dim))
 
-    pm.fit(pds, epochs=epochs)
+    pm.fit(pds, epochs=int(epochs))
 
     pm.save(pds, output_filepath)

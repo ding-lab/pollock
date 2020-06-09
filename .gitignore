@@ -8,6 +8,8 @@ output.tsv
 .Rhistory
 deploy.sh
 
+examples/data
+examples/modules
 conda_builds/
 dinglab-pollock/
 build/

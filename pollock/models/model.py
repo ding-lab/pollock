@@ -372,10 +372,10 @@ class PollockModel(object):
         embeddings = self.get_cell_embeddings(ds)
         return umap.UMAP().fit_transform(embeddings)
 
-    def get_cell_type_loss(self, cell_adata):
+    def get_cell_type_loss(self, cell_adata, n_per_cell_type):
         ## do training
         cell_ids = np.asarray(
-                random.sample(list(cell_adata.obs.index), min(cell_adata.shape[0], 100)))
+                random.sample(list(cell_adata.obs.index), min(cell_adata.shape[0], n_per_cell_type)))
         if 'sparse' in str(type(cell_adata.X)).lower():
             X = cell_adata[cell_ids].X.toarray()
         else:
@@ -397,7 +397,8 @@ class PollockModel(object):
                 target_names=self.class_names, output_dict=True, zero_division=0)
         return clf, report
 
-    def fit(self, pollock_dataset, epochs=10, max_metric_batches=10, metric_epoch_interval=1):
+    def fit(self, pollock_dataset, epochs=10, max_metric_batches=5, metric_epoch_interval=1,
+            metric_n_per_cell_type=50):
         compute_apply_gradients = get_compute_apply_gradients()
         for epoch in range(1, epochs + 1):
             start_time = time.time()
@@ -425,16 +426,18 @@ class PollockModel(object):
                     ## do training
                     cell_adata = pollock_dataset.train_adata[pollock_dataset.train_adata.obs[
                             pollock_dataset.cell_type_key]==cell_type]
-                    self.cell_type_train_losses[cell_type].append(self.get_cell_type_loss(cell_adata))
+                    self.cell_type_train_losses[cell_type].append(self.get_cell_type_loss(
+                            cell_adata, metric_n_per_cell_type))
     
                     ## do validation
                     cell_adata = pollock_dataset.val_adata[pollock_dataset.val_adata.obs[
                             pollock_dataset.cell_type_key]==cell_type]
-                    self.cell_type_val_losses[cell_type].append(self.get_cell_type_loss(cell_adata))
+                    self.cell_type_val_losses[cell_type].append(self.get_cell_type_loss(
+                            cell_adata, metric_n_per_cell_type))
     
                 ## do accuracies
                 adata, _ = balancedish_training_generator(pollock_dataset.train_adata,
-                        pollock_dataset.cell_type_key, n_per_cell_type=500)
+                        pollock_dataset.cell_type_key, n_per_cell_type=metric_n_per_cell_type)
                 y = pollock_dataset.cell_type_encoder.transform(
                         adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
                             (-1, 1))).flatten()
@@ -447,7 +450,7 @@ class PollockModel(object):
                     self.cell_type_train_f1[cell_type].append(report[cell_type]['f1-score'])
         
                 adata, _ = balancedish_training_generator(pollock_dataset.val_adata,
-                        pollock_dataset.cell_type_key, n_per_cell_type=500)
+                        pollock_dataset.cell_type_key, n_per_cell_type=metric_n_per_cell_type)
                 y = pollock_dataset.cell_type_encoder.transform(
                         adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
                             (-1, 1))).flatten()

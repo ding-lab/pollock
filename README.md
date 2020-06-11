@@ -86,6 +86,7 @@ reticulate::use_python("<path/to/python/executable>")
 
 [example usage of rpollock on pbmc3k](https://github.com/ding-lab/pollock/blob/master/examples/rpollock_pbmc_prediction.Rmd)
 
+[This notebook](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb) is a python script walking over the information that is contained in each module. Though it is in python, all this information is saved in a json file so everything done in that notebook can also be done in R.
 
 #### Command line tool
 ```bash

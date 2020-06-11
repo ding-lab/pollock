@@ -1,29 +1,33 @@
-FROM tensorflow/tensorflow:latest-gpu-py3-jupyter
+FROM tensorflow/tensorflow:latest-gpu
 
-## ## RUN apt-get update
-## ## RUN yes | apt-get install vim wget
-## ## 
-## ## RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-## ## RUN bash ~/miniconda.sh -b -p ./miniconda
-## ## ENV PATH="/miniconda/bin:$PATH"
-## RUN apt-get update
-## RUN apt-get install -y python3.6
-## opencv si weired in docker
-RUN apt-get install -y libsm6 libxext6 libxrender-dev git vim
+RUN apt-get update && apt-get install -y vim wget curl git
 
+## set up vim
 RUN git clone https://github.com/estorrs/dotfiles.git \
-    && cp dotfiles/.vimrc /root/.vimrc \
-    && curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+  && cp dotfiles/.vimrc /root/.vimrc \
+  && curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
+## set up git
 RUN git config --global user.email epstorrs@gmail.com \
-    && git config --global user.name Erik Storrs
+  && git config --global user.name Erik Storrs
 
+## set up conda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+RUN bash ~/miniconda.sh -b -p /miniconda
+ENV PATH="/miniconda/bin:$PATH"
 
+## add channels in the right order
+RUN conda config --add channels defaults \
+  && conda config --add channels bioconda \
+  && conda config --add channels conda-forge
 
-COPY . /tf/pollock
-WORKDIR /tf/pollock
+COPY . /pollock
+WORKDIR /pollock
 
+## RUN pip install -e .
+## 
+## RUN pollock-setup from_seurat
+RUN conda install -y -c epstorrs pollock==0.0.8
 
-RUN /usr/bin/python3 -m pip install .
-
-## CMD jupyter notebook --no-browser --allow-root --ip 0.0.0.0
+## CMD /bin/bash
+CMD jupyter notebook --no-browser --allow-root --ip 0.0.0.0

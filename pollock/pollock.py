@@ -6,7 +6,8 @@ import pandas as pd
 import scanpy as sc
 
 import pollock
-from pollock import PollockDataset, PollockModel, load_from_directory, save_rds, read_rds
+from pollock.models.model import PollockDataset, PollockModel, load_from_directory
+from pollock.preprocessing.preprocessing import read_rds
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
@@ -40,7 +41,7 @@ to be classified. Only used in 10x mode')
 
 parser.add_argument('--output-type', type=str, default='txt',
         help='What output type to write. Valid arguments are \
-seurat, scanpy, and txt')
+seurat and txt')
 parser.add_argument('--output-prefix', type=str, default='output',
         help='Filepath prefix to write output file. Only used in 10X mode')
 
@@ -74,17 +75,18 @@ def load_scanpy():
 
     return adata
 
-def save_seurat(adata, output_fp):
-    """Save seurat RDS from adata"""
-    temp_fp = 'temp.loom'
-    ## save cell and feature id so loom recongnizes them
-    adata.obs['CellID'] = list(adata.obs.index)
-    adata.var['Gene'] = list(adata.var.index)
-    adata.write_loom(temp_fp)
-    save_rds(temp_fp, output_fp)
-    os.remove(temp_fp)
-
-    return adata
+## def save_seurat(adata, output_fp):
+##     """Save seurat RDS from adata"""
+##     temp_fp = 'temp.h5ad'
+##     ## save cell and feature id so loom recongnizes them
+##     adata.obs['CellID'] = list(adata.obs.index)
+##     adata.var['Gene'] = list(adata.var.index)
+## ##     adata.write_loom(temp_fp)
+##     adata.write_h5ad(temp_fp)
+##     save_rds(temp_fp, output_fp)
+##     os.remove(temp_fp)
+## 
+##     return adata
 
 def check_arguments():
     """Check arguments for obvious issues"""
@@ -150,20 +152,22 @@ def main():
         output_fp = f'{args.output_prefix}.txt'
         logging.info(f'writing txt output to {output_fp}')
         df.to_csv(output_fp, sep='\t', index=True, header=True)
-    elif args.output_type == 'seurat':
-        output_fp = f'{args.output_prefix}.rds'
-        logging.info(f'writing seurat object to {output_fp}')
-        adata.obs = pd.concat((adata.obs, df), axis=1)
-        adata.obs.index.name = 'cell_id'
-        adata.obs['cell_id'] = list(adata.obs.index)
-        adata.obs = adata.obs.set_index('cell_id')
-        save_seurat(adata, output_fp)
+##     elif args.output_type == 'seurat':
+##         output_fp = f'{args.output_prefix}.rds'
+##         logging.info(f'writing seurat object to {output_fp}')
+##         adata.obs = pd.concat((adata.obs, df), axis=1)
+##         adata.obs.index.name = 'cell_id'
+##         adata.obs['cell_id'] = list(adata.obs.index)
+##         adata.obs = adata.obs.set_index('cell_id')
+##         save_seurat(adata, output_fp)
     elif args.output_type == 'scanpy':
         output_fp = f'{args.output_prefix}.h5ad'
         logging.info(f'writing scanpy anndata in .h5ad format to {output_fp}')
         adata.obs = pd.concat((adata.obs, df), axis=1)
         adata.obs.index.name = 'cell_id'
         adata.write_h5ad(output_fp)
+    else:
+        raise RuntimeError(f'{args.output_type} is not avalid output type')
 
 if __name__ == '__main__':
     main()

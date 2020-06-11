@@ -1,0 +1,84 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library('Seurat')
+```
+
+```{r}
+library('rpollock')
+```
+
+```{r}
+devtools::load_all('/Users/erikstorrs/Documents/ding/rpollock')
+```
+
+```{r}
+reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock/bin/python")
+```
+
+```{r}
+pbmc = readRDS(('../tests/data/247669_processed.rds'))
+pbmc
+```
+
+```{r}
+pbmc@meta.data$seurat_clusters
+```
+
+```{r}
+create_module(pbmc@assays$RNA@counts, pbmc@meta.data$seurat_clusters, '../tests/data/test_module', alpha=.0001, latent_dim=25, epochs=25, n_per_cell_type=100)
+```
+
+```{r}
+# preds = predict_cell_types(pbmc@assays$RNA@counts, '../tests/data/HTAN_breast_v9/')
+preds = predict_cell_types(pbmc@assays$RNA@counts, '../tests/data/test_module/')
+
+preds
+```
+
+
+```{r}
+pbmc@assays$RNA
+```
+
+```{r}
+pbmc@assays$SCT
+```
+
+
+```{r}
+df = as.data.frame(pbmc@assays$RNA@counts)
+df
+```
+
+```{r}
+ls = pbmc@meta.data$seurat_clusters
+class(ls)
+as.array(ls)
+```
+
+
+```{r}
+pollock = reticulate::import('pollock')
+pollock
+```
+```{r}
+pollock$wrappers
+```
+
+```{r}
+preds = pollock$wrappers$rwrappers$predict_from_dataframe(df,
+                                                  '../tests/data/HTAN_breast_v9/')
+# pollock$wrappers$rwrappers$predict_from_dataframe
+```
+
+```{r}
+preds
+```

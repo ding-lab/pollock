@@ -1,0 +1,82 @@
+---
+title: "rpollock_pbmc_prediction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import libraries
+
+The first time you use rpollock, you may need to specify the path of the python executable for reticulate. To do this run the following code to find the location of you're python installation.
+
+```{bash}
+which -a python
+```
+
+then specify it by running the following with the path to your python executable.
+
+```{r}
+reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock/bin/python")
+```
+
+
+import seurat and rpollock
+
+```{r}
+library('Seurat')
+library('rpollock')
+```
+
+## Load in RDS object
+This PBMC RDS object is the RDS object produced after following the [Seurat pbmc 3k clustering tutorial](https://satijalab.org/seurat/v3.1/pbmc3k_tutorial.html)
+
+```{r}
+pbmc = readRDS(('data/pbmc.rds'))
+pbmc
+```
+
+
+```{r}
+DimPlot(pbmc, reduction = "umap")
+```
+
+
+  - 
+```{r}
+head(pbmc@active.ident)
+```
+
+the pollock create_module function takes the following as input
+  - RNA expression matrix. Note that it takes raw, unnormalized RNA expression counts. Typically this is stored at $assays$RNA@counts in seurat objects
+  - A vector/list of cell types. The each position in the list corresponds to each cell in the expression matrix
+  - alpha
+    - this parameter controls how regularized the BVAE is. .0001 is usually a good value. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+  - latent_dim
+    - the shape of the latent dim in the BVAE. In general 25 is a good starting point. This number is analgous to the number of principle components in a traditional pca decomposition.
+  - epochs
+    - the number of epochs the neural net should train for. typically between 25-50, but can vary based on alpha and latent_dim.
+  - n_per_cell_type
+    - number of cells per cell type that should be included in the training dataset. For smaller datasets like this one 200 is usually sufficient. For larger datasets it can be helpful to increase the number of cells to 500-2k range. If you have a particular cell type in your dataset that has a low cell count it is usually a good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type should be no greater than the minimum cell type count * 10
+
+```{r}
+create_module(pbmc@assays$RNA@counts, pbmc@active.ident, './pbmc3k', alpha=.0001, latent_dim=25, epochs=25, n_per_cell_type=200)
+```
+
+there should now be a module named pbmc3k stored in the current working directory.
+
+now lets use it to make some predictions (here we just use the same dataset over again, but it could be applied to any single cell expression dataset).
+
+as arguments the predict_cell_types function takes an expression matrix of raw gene counts (similar to the create_module function above), and the filepath to the module to use for cell type prediction.
+
+the predict_cell_types frunction returns a dataframe of predicted cell type labels, probabilities associated with those labels, and probabilities for each of the possible cell types.
+
+```{r}
+predictions = predict_cell_types(pbmc@assays$RNA@counts, './pbmc3k')
+
+predictions
+```
+
+
+

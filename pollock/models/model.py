@@ -39,12 +39,19 @@ RANGE_SCALER_PATH = 'range_scaler.pkl'
 ENCODER_PATH = 'encoder.pkl' 
 CLASSIFIER_PATH = 'clf.pkl'
 
-def cap_list(ls, n=100):
-    if len(ls) > n:
+def cap_list(ls, n=100, split=.8, oversample=True):
+    cap = int(len(ls) * split)
+    if cap > n:
         return random.sample(ls, n)
-    return random.sample(ls, int(len(ls) * .8))
 
-def balancedish_training_generator(adata, cell_type_key, n_per_cell_type):
+    if oversample:
+        pool = random.sample(ls, cap)
+        ## oversample to 
+        return random.choices(pool, k=n)
+
+    return random.sample(ls, cap)
+
+def balancedish_training_generator(adata, cell_type_key, n_per_cell_type, oversample=True):
     cell_type_to_idxs = {}
     for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
         if cell_type not in cell_type_to_idxs:
@@ -52,7 +59,7 @@ def balancedish_training_generator(adata, cell_type_key, n_per_cell_type):
         else:
             cell_type_to_idxs[cell_type].append(cell_id)
     
-    cell_type_to_idxs = {k:cap_list(ls, n_per_cell_type)
+    cell_type_to_idxs = {k:cap_list(ls, n_per_cell_type, oversample=oversample)
                          for k, ls in cell_type_to_idxs.items()}
     
     train_ids = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
@@ -147,7 +154,7 @@ def filter_adata_genes(adata, genes):
     return new_adata[:, genes]
 
 class PollockDataset(object):
-    def __init__(self, adata, cell_type_key='cell_type', n_per_cell_type=500,
+    def __init__(self, adata, cell_type_key='cell_type', n_per_cell_type=500, oversample=True,
             batch_size=64, dataset_type='training', min_genes=None, min_cells=None,
             log=True, standard_scaler=None,
             range_scaler=None, cell_type_encoder=None, genes=None, cell_types=None):
@@ -169,6 +176,7 @@ class PollockDataset(object):
         else:
             self.cell_type_key=cell_type_key
             self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
+            self.oversample = oversample
             self.cell_type_encoder = OrdinalEncoder(categories=[self.cell_types])
             self.n_per_cell_type=n_per_cell_type
             self.train_adata = None
@@ -190,7 +198,7 @@ class PollockDataset(object):
 
         logging.info(f'creating tf datasets')
         self.train_adata, self.val_adata = balancedish_training_generator(self.adata,
-                self.cell_type_key, self.n_per_cell_type)
+                self.cell_type_key, self.n_per_cell_type, oversample=self.oversample)
 
         self.train_ds, self.val_ds = get_tf_datasets(self.train_adata, self.val_adata,
                 train_buffer=10000, batch_size=self.batch_size)
@@ -212,7 +220,6 @@ class PollockDataset(object):
         self.prediction_ds = get_tf_prediction_ds(self.prediction_adata, batch_size=1000)
 
 def load_from_directory(adata, model_filepath, batch_size=64, min_genes_per_cell=None):
-##     model = tf.saved_model.load(os.path.join(model_filepath, MODEL_PATH))
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)
     genes = np.load(os.path.join(model_filepath, GENES_PATH), allow_pickle=True)
     summary = json.load(open(os.path.join(model_filepath, MODEL_SUMMARY_PATH)))
@@ -319,11 +326,9 @@ compute_apply_gradients = get_compute_apply_gradients()
 
 def batch_adata(adata, n=1000):
     if 'sparse' in str(type(adata.X)).lower():
-        return [adata.X[i:i+n].toarray()
-                for i in range(0, adata.shape[0], n)]
+        return tf.data.Dataset.from_tensor_slices(adata.X.toarray()).batch(n)
     else:
-        return [adata.X[i:i+n]
-                for i in range(0, adata.shape[0], n)]
+        return tf.data.Dataset.from_tensor_slices(adata.X).batch(n)
 
 class PollockModel(object):
     def __init__(self, class_names, input_shape, model=None, learning_rate=1e-4,
@@ -436,26 +441,26 @@ class PollockModel(object):
                             cell_adata, metric_n_per_cell_type))
     
                 ## do accuracies
+                ## training
                 adata, _ = balancedish_training_generator(pollock_dataset.train_adata,
                         pollock_dataset.cell_type_key, n_per_cell_type=metric_n_per_cell_type)
                 y = pollock_dataset.cell_type_encoder.transform(
                         adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
                             (-1, 1))).flatten()
                 X = batch_adata(adata, n=pollock_dataset.batch_size)
-##                 X, y = X[:max_metric_batches], y[:max_metric_batches*pollock_dataset.batch_size]
                 clf, report = self.get_cell_type_accuracy(X, y,
                         clf=None)
                 self.train_accuracies.append(report.get('accuracy', 0.))
                 for cell_type in self.class_names: 
                     self.cell_type_train_f1[cell_type].append(report[cell_type]['f1-score'])
         
+                ## validation
                 adata, _ = balancedish_training_generator(pollock_dataset.val_adata,
                         pollock_dataset.cell_type_key, n_per_cell_type=metric_n_per_cell_type)
                 y = pollock_dataset.cell_type_encoder.transform(
                         adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
                             (-1, 1))).flatten()
                 X = batch_adata(adata, n=pollock_dataset.batch_size)
-##                 X, y = X[:max_metric_batches], y[:max_metric_batches*pollock_dataset.batch_size]
                 _, report = self.get_cell_type_accuracy(X, y,
                         clf=clf)
                 self.val_accuracies.append(report.get('accuracy', 0.))
@@ -486,7 +491,8 @@ val loss: {val_loss.result()}')
         output_probs = np.max(probs, axis=1).flatten()
 
         output_labels, output_probs = zip(*
-                [(pollock_dataset.cell_type_encoder.categories_[0][c], prob) if prob > threshold else ('unknown', prob)
+                [(pollock_dataset.cell_type_encoder.categories_[0][c], prob)
+                if prob > threshold else ('unknown', prob)
                 for c, prob in zip(output_classes, output_probs)])
 
         return output_labels, output_probs, probs
@@ -508,9 +514,12 @@ val loss: {val_loss.result()}')
                 np.asarray(pollock_training_dataset.cell_types))
         np.save(os.path.join(filepath, GENES_PATH),
                 np.asarray(pollock_training_dataset.genes))
-        joblib.dump(pollock_training_dataset.standard_scaler, os.path.join(filepath, STANDARD_SCALER_PATH))
-        joblib.dump(pollock_training_dataset.range_scaler, os.path.join(filepath, RANGE_SCALER_PATH))
-        joblib.dump(pollock_training_dataset.cell_type_encoder, os.path.join(filepath, ENCODER_PATH))
+        joblib.dump(pollock_training_dataset.standard_scaler, os.path.join(filepath,
+                STANDARD_SCALER_PATH))
+        joblib.dump(pollock_training_dataset.range_scaler, os.path.join(filepath,
+                RANGE_SCALER_PATH))
+        joblib.dump(pollock_training_dataset.cell_type_encoder, os.path.join(filepath,
+                ENCODER_PATH))
         joblib.dump(self.clf, os.path.join(filepath, CLASSIFIER_PATH))
 
         if metadata is not None:
@@ -536,8 +545,7 @@ val loss: {val_loss.result()}')
                 'cell_types': self.class_names
                 }
 
-        train_batches = batch_adata(pollock_training_dataset.train_adata, n=1000)
-##         val_batches = batch_adata(pollock_training_dataset.val_adata, n=1000)
+        train_batches = batch_adata(pollock_training_dataset.train_adata, n=100)
         val_batches = pollock_training_dataset.val_ds
 
         if score_train:

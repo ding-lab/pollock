@@ -31,7 +31,7 @@ conda config --add channels conda-forge
 To install
 
 ```bash
-conda install -c epstorrs pollock==0.0.8
+conda install -c epstorrs pollock==0.0.9
 ```
 ## Usage
 

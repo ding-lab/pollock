@@ -1,5 +1,3 @@
-#FROM python:3.6
-## FROM nvidia/cuda:10.2-base
 FROM tensorflow/tensorflow:latest-gpu
 
 RUN apt-get update && apt-get install -y vim wget curl git
@@ -26,9 +24,10 @@ RUN conda config --add channels defaults \
 COPY . /pollock
 WORKDIR /pollock
 
-RUN pip install -e .
-
-RUN pollock-setup from_seurat
+## RUN pip install -e .
+## 
+## RUN pollock-setup from_seurat
+RUN conda install -y -c epstorrs pollock==0.0.8
 
 ## CMD /bin/bash
 CMD jupyter notebook --no-browser --allow-root --ip 0.0.0.0

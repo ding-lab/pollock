@@ -168,7 +168,7 @@ An example of running the single-cell cesc module from within a docker container
 
 ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu pollock from_seurat /modules/sc_myeloma --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type txt
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.9 pollock from_seurat /modules/sc_myeloma --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type txt
 ```
   
 #### Outputs

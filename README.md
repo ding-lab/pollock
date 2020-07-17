@@ -164,11 +164,11 @@ docker pull estorrs/pollock-cpu:0.0.9
 
 When using docker, input and ouput file directories need to be mounted as a volume using the docker -v argument.
 
-An example of running the single-cell cesc module from within a docker container. Sections outlined by <> need to be replaced. Note filepaths in the -v flag must be absolute.
+An example of running a module from within a docker container. Sections outlined by <> need to be replaced. Note filepaths in the -v flag must be absolute.
 
 ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.9 pollock from_seurat /modules/sc_myeloma --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type txt
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.9 pollock from_seurat /modules/<module_name> --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type txt
 ```
   
 #### Outputs

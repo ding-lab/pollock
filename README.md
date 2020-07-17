@@ -159,7 +159,7 @@ pollock from_scanpy /diskmnt/Projects/Users/estorrs/pollock/modules/sc_myeloma -
 
 Docker images are available at dockerhub under the image name estorrs/pollock-cpu. To pull the latest image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:latest
+docker pull estorrs/pollock-cpu:0.0.9
 ```
 
 When using docker, input and ouput file directories need to be mounted as a volume using the docker -v argument.

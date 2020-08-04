@@ -18,7 +18,7 @@ which -a python
 then specify it by running the following with the path to your python executable.
 
 ```{r}
-reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock/bin/python")
+reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock_test_2/bin/python")
 ```
 
 

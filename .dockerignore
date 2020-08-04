@@ -4,6 +4,8 @@ modules/
 tests/data/
 tests/modules/
 tests/outputs/
+tests/
+examples/
 
 *.tfcache*
 notebooks/cache/

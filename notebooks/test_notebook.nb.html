@@ -1491,7 +1491,7 @@ window.initializeCodeFolding = function(show) {
   var currentIndex = 1;
 
   // select all R code blocks
-  var rCodeBlocks = $('pre.r, pre.python, pre.bash, pre.sql, pre.cpp, pre.stan, pre.julia');
+  var rCodeBlocks = $('pre.r, pre.python, pre.bash, pre.sql, pre.cpp, pre.stan, pre.julia, pre.foldable');
   rCodeBlocks.each(function() {
 
     // create a collapsable div to wrap the code in
@@ -1811,10 +1811,10 @@ Registered S3 method overwritten by &#39;htmlwidgets&#39;:
 <pre class="r"><code>pbmc = readRDS((&#39;../tests/data/247669_processed.rds&#39;))
 pbmc</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiQW4gb2JqZWN0IG9mIGNsYXNzIFNldXJhdCBcbjQ4NzM0IGZlYXR1cmVzIGFjcm9zcyAyMzkzIHNhbXBsZXMgd2l0aGluIDIgYXNzYXlzIFxuQWN0aXZlIGFzc2F5OiBTQ1QgKDE1MTk2IGZlYXR1cmVzKVxuIDEgb3RoZXIgYXNzYXkgcHJlc2VudDogUk5BXG4gMiBkaW1lbnNpb25hbCByZWR1Y3Rpb25zIGNhbGN1bGF0ZWQ6IHBjYSwgdW1hcFxuIn0= -->
+<!-- rnb-output-begin eyJkYXRhIjoiQW4gb2JqZWN0IG9mIGNsYXNzIFNldXJhdCBcbjQ4NzM0IGZlYXR1cmVzIGFjcm9zcyAyMzkzIHNhbXBsZXMgd2l0aGluIDIgYXNzYXlzIFxuQWN0aXZlIGFzc2F5OiBTQ1QgKDE1MTk2IGZlYXR1cmVzLCAzMDAwIHZhcmlhYmxlIGZlYXR1cmVzKVxuIDEgb3RoZXIgYXNzYXkgcHJlc2VudDogUk5BXG4gMiBkaW1lbnNpb25hbCByZWR1Y3Rpb25zIGNhbGN1bGF0ZWQ6IHBjYSwgdW1hcFxuIn0= -->
 <pre><code>An object of class Seurat 
 48734 features across 2393 samples within 2 assays 
-Active assay: SCT (15196 features)
+Active assay: SCT (15196 features, 3000 variable features)
  1 other assay present: RNA
  2 dimensional reductions calculated: pca, umap</code></pre>
 <!-- rnb-output-end -->

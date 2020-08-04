@@ -1,0 +1,70 @@
+{% set name = "dinglab-pollock" %}
+{% set version = "0.0.10" %}
+
+package:
+##   name: "{{ name|lower }}"
+  name: "pollock"
+  version: "{{ version }}"
+
+source:
+  url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
+  sha256: 31a436f93206c32d5e6e3ca78412783dfd113890eb03a1da248850a1c3aa0116
+
+build:
+  number: 0
+  entry_points:
+    - pollock=pollock.pollock:main
+##     - pollock-setup=pollock.pollock_setup:main
+  script: "{{ PYTHON }} -m pip install . -vv"
+
+requirements:
+  host:
+    - jupyter
+    - loompy >=2.0.17
+    - matplotlib >=3.2.1
+    - pandas >=1.0.0
+    - pip
+    - python
+    - scanpy >=1.4.4
+    - scikit-learn ==0.22.1
+    - scipy ==1.4.1
+    - seaborn >=0.10.0
+    - umap-learn >=0.3.10
+    - r-seurat >=3.0.2
+    - r-devtools >=2.3.0
+
+  run:
+    - jupyter
+    - loompy >=2.0.17
+    - matplotlib >=3.2.1
+    - pandas >=1.0.0
+    - python
+    - scanpy >=1.4.4
+    - scikit-learn ==0.22.1
+    - scipy ==1.4.1
+    - seaborn >=0.10.0
+    - umap-learn >=0.3.10
+    - r-seurat >=3.0.2
+    - r-devtools >=2.3.0
+test:
+  imports:
+    - pollock
+    - pollock.models
+    - pollock.preprocessing
+    - pollock.wrappers
+  commands:
+    - pollock --help
+##     - pollock-setup --help
+
+about:
+  home: "https://github.com/ding-lab/pollock"
+  license: MIT
+  license_family: MIT
+  license_file: 
+  summary: "A tool for single cell classification and characterization."
+  doc_url: 
+  dev_url: 
+
+extra:
+  recipe-maintainers:
+    - your-github-id-here

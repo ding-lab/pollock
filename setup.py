@@ -34,7 +34,7 @@ setup(
         'seaborn>=0.10.0',
         'scipy==1.4.1',
         'scikit-learn==0.22.1',
-        'tensorflow==2.3.0',
+        'tensorflow==2.1.0',
         'numpy<1.19.0,>=1.16.0',
         'jupyter',
         'umap-learn>=0.3.10',

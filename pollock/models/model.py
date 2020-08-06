@@ -402,7 +402,7 @@ class PollockModel(object):
                 target_names=self.class_names, output_dict=True, zero_division=0)
         return clf, report
 
-    def fit(self, pollock_dataset, epochs=10, max_metric_batches=5, metric_epoch_interval=1,
+    def fit(self, pollock_dataset, epochs=10, max_metric_batches=2, metric_epoch_interval=1,
             metric_n_per_cell_type=50):
         compute_apply_gradients = get_compute_apply_gradients()
         for epoch in range(1, epochs + 1):

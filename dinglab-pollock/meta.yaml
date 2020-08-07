@@ -8,7 +8,7 @@ package:
 
 source:
   url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
-  sha256: 31a436f93206c32d5e6e3ca78412783dfd113890eb03a1da248850a1c3aa0116
+  sha256: effcde1e237585522f252fb6fdc9244d032bd1804830307d7d40fb8e4d439282
 
 build:
   number: 0
@@ -26,7 +26,7 @@ requirements:
     - pip
     - python
     - scanpy >=1.4.4
-    - scikit-learn ==0.22.1
+    - scikit-learn ==0.23.1
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10
@@ -39,8 +39,9 @@ requirements:
     - matplotlib >=3.2.1
     - pandas >=1.0.0
     - python
+    - pip
     - scanpy >=1.4.4
-    - scikit-learn ==0.22.1
+    - scikit-learn ==0.23.1
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10

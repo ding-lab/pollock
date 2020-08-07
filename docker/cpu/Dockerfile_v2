@@ -1,0 +1,52 @@
+#   Docker image for the latest build of Seurat
+FROM ubuntu:bionic
+
+## LABEL org.label-schema-version="latest" \
+##     org.label-schema.name="Seurat" \
+##     org.label-schema.name="Satija Lab" \
+##     org.label-schema.license="GPLv3" \
+##     org.label-schema.build-date=''
+
+
+#   Set up the system for Seurat
+#   Don't ask for user input
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+#   Configure tzdata (ish)
+RUN echo 'tzdata tzdata/Areas select US' | debconf-set-selections
+RUN echo 'tzdata tzdata/Zones/US select New York' | debconf-set-selections
+#   Add CRAN PPA
+RUN apt-get update
+RUN apt-get install -y ca-certificates gnupg2
+RUN echo "deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/" | tee --append /etc/apt/sources.list
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
+#   Install R
+RUN apt-get update
+RUN apt-get install -y r-base-dev
+
+#   Install system Seurat dependencies
+RUN apt-get install -y libhdf5-dev libcurl4-openssl-dev libssl-dev
+
+#   Install Seurat
+RUN R --slave --no-restore --no-save -e "install.packages('Seurat', repos='https://cloud.r-project.org')"
+RUN R --slave --no-restore --no-save -e "install.packages('BiocManager', repos='https://cloud.r-project.org')"
+RUN R --slave --no-restore --no-save -e "BiocManager::install('scater')"
+
+RUN apt-get install -y wget
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+RUN bash ~/miniconda.sh -b -p /miniconda
+ENV PATH="$PATH:/miniconda/bin"
+
+ENV RETICULATE_PYTHON=/miniconda/bin/python
+
+RUN apt-get install -y python3-pip python3-setuptools python3-dev
+RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install setuptools --upgrade
+
+COPY . /pollock
+WORKDIR /pollock
+
+RUN python3 -m pip install -e .
+RUN python3 -m pip install anndata2ri==1.0.2
+
+CMD /bin/bash

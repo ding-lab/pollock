@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     # $ pip install pollock
     name='dinglab-pollock',
-    version='0.0.9',
+    version='0.0.10',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -32,9 +32,10 @@ setup(
         'scanpy>=1.4.4',
         'pandas>=1.0.0',
         'seaborn>=0.10.0',
-        'scipy>=1.4.1',
-        'scikit-learn>=0.22.1',
+        'scipy==1.4.1',
+        'scikit-learn==0.22.1',
         'tensorflow==2.1.0',
+        'numpy<1.19.0,>=1.16.0',
         'jupyter',
         'umap-learn>=0.3.10',
         'loompy>=2.0.17',
@@ -45,7 +46,7 @@ setup(
     entry_points={ 
         'console_scripts': [
             'pollock=pollock.pollock:main',
-            'pollock-setup=pollock.pollock_setup:main',
+##             'pollock-setup=pollock.pollock_setup:main',
         ],
    },
 )

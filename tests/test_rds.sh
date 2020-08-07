@@ -1,0 +1,1 @@
+docker run -v /Users/erikstorrs/Documents/ding/pollock/data:/rds -v /Users/erikstorrs/Documents/ding/pollock/examples/modules/:/modules -t estorrs/pollock-cpu:0.0.10 pollock from_seurat /modules/pbmc --seurat-rds-filepath /rds/pbmc.rds --output-prefix output --output-type txt

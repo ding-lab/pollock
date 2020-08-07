@@ -8,11 +8,11 @@ output.tsv
 .Rhistory
 deploy.sh
 
+tests/
 examples/pbmc3k/
 examples/data/
 examples/modules/
 conda_builds/
-dinglab-pollock/
 build/
 dist/
 data/

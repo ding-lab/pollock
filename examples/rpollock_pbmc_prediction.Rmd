@@ -3,10 +3,6 @@ title: "rpollock_pbmc_prediction"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ## Import libraries
 
 The first time you use rpollock, you may need to specify the path of the python executable for reticulate. To do this run the following code to find the location of you're python installation.
@@ -18,7 +14,7 @@ which -a python
 then specify it by running the following with the path to your python executable.
 
 ```{r}
-reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock/bin/python")
+reticulate::use_python("/Users/erikstorrs/miniconda3/envs/pollock_test_2/bin/python")
 ```
 
 
@@ -33,7 +29,7 @@ library('rpollock')
 This PBMC RDS object is the RDS object produced after following the [Seurat pbmc 3k clustering tutorial](https://satijalab.org/seurat/v3.1/pbmc3k_tutorial.html)
 
 ```{r}
-pbmc = readRDS(('data/pbmc.rds'))
+pbmc = readRDS(('../examples/data/pbmc.rds'))
 pbmc
 ```
 
@@ -79,4 +75,30 @@ predictions
 ```
 
 
+Merge predictions back into Seurat object
 
+```{r}
+for (col in colnames(predictions)) {
+  pbmc = AddMetaData(object=pbmc, metadata=predictions[col], col.name=col)
+}
+pbmc
+```
+```{r}
+head(pbmc$predicted_cell_type)
+```
+
+```{r}
+head(pbmc$predicted_cell_type_probability)
+```
+
+plot predicted cell type
+
+```{r}
+DimPlot(pbmc, reduction = "umap", group.by='predicted_cell_type')
+```
+
+plot the predicted cell type probability and the probability of a cell being a CD8 T cell
+
+```{r}
+FeaturePlot(pbmc, c('predicted_cell_type_probability', 'probability_CD8_T'))
+```

@@ -15,7 +15,8 @@ In Development
   
 * Python3.6 or later
 
-* Working installation of conda and [bioconda](https://bioconda.github.io/). If you are new to conda and bioconda, we recommend following the getting started page [here](https://bioconda.github.io/user/install.html)
+* Anaconda/Conda
+  * Working installation of conda and [bioconda](https://bioconda.github.io/). If you are new to conda and bioconda, we recommend following the getting started page [here](https://bioconda.github.io/user/install.html)
 
 #### To install
 
@@ -31,7 +32,7 @@ conda config --add channels conda-forge
 To install
 
 ```bash
-conda install -c epstorrs pollock==0.0.9
+conda install -c epstorrs pollock==0.0.10
 ```
 
 NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
@@ -88,101 +89,142 @@ reticulate::use_python("<path/to/python/executable>")
 
 [This notebook](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb) is a python script walking over the information that is contained in each module. Though it is in python, all this information is saved in a json file so everything done in that notebook can also be done in R.
 
-#### Command line tool
+## Command line tool
 ```bash
-usage: pollock [-h] [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
+usage: pollock [-h] [--module-filepath MODULE_FILEPATH]
+               [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
                [--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH]
+               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
+               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
+               [--n-per-cell-type N_PER_CELL_TYPE]
                [--counts-10x-filepath COUNTS_10X_FILEPATH]
-               [--min-genes-per-cell MIN_GENES_PER_CELL]
-               [--output-type OUTPUT_TYPE] [--output-prefix OUTPUT_PREFIX]
-               source_type module_filepath
+               [--min-genes-per-cell MIN_GENES_PER_CELL] [--txt-output]
+               [--output-prefix OUTPUT_PREFIX]
+               mode source_type
 ```
 
 ##### Arguments
+
+mode
+  * What task/mode is pollock to perform. Valid arguments are:
+    * train
+    * predict
 
 source_type
   * Input source type. Possible values are: from_seurat, from_10x, from_scanpy.
 
   
 module_filepath
-  * Filepath to module to use for classification. The location of the tumor/tissue module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+  * If in prediction mode, this is the filepath to module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+  * If in training mode, this is the filepath where pollock will save the trained module.
 
-###### optional arguments
+###### mode specific arguments
 
 --seurat-rds-filepath SEURAT_RDS_FILEPATH
-  * A saved Seurat RDS object to use for classification. Seurat experiment matrix must be raw expression counts (i.e. not normalized)
+  * A saved Seurat RDS object to use as input. Raw RNA-seq (i.e. not normalized) counts **must** be stored in @assays$RNA@counts. Note that this is where raw rna-seq counts will be stored by most Seurat single cell workflows by default.
   
 --scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH
-  * A saved .h5ad file to use for classification. scanpy data matrix (.X attribute in the anndata object) must be raw expression counts (i.e. not normalized)
+  * A saved .h5ad file to use as input. scanpy expression matrix (.X attribute in the anndata object) must be raw expression counts (i.e. not normalized)
   
 --counts-10x-filepath COUNTS_10X_FILEPATH
-  * Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
+  * Can only be used with predict mode. Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
+
+###### specific to train mode
+--cell-type-key CELL_TYPE_KEY
+  * The key to use for training the pollock module. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type label. The number of lines must be equal to the number of cells in the input object. The cell types must also be in the same order as the cells in the input object. By default if the input is a Seurat object pollock will use cell type labels in @active.ident, or if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].
+  
+--alpha ALPHA
+  * This parameter controls how regularized the BVAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+
+--epochs EPOCHS
+  * Number of epochs to train the neural net for. Default is 20.
+
+--latent-dim LATENT_DIM
+  * Size of hidden layer in the B-VAE. Default is 25.
+  
+--n-per-cell-type N_PER_CELL_TYPE
+  * The number of cells per cell type that should be included in the training dataset. Typically this number will be somewhere between 500-2000. The default is 500. If you have a particular cell type in your dataset that has a low cell count it is usually a good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type should be no greater than the minimum cell type count * 10.
+
+
+###### optional arguments specific to predict mode
 
 --min-genes-per-cell MIN_GENES_PER_CELL
   * The minimun number of genes expressed in a cell in order for it to be classified. Only used in 10x mode
   
---output-type OUTPUT_TYPE
-  * What output type to write. Valid arguments are scanpy and txt
+--txt-output TXT_OUTPUT
+  * If included output will be written to a tab-seperated .txt file. Otherwise output will be saved in the metadata of the input seurat object (.rds) or scanpy anndata object (.h5ad)
   
 --output-prefix OUTPUT_PREFIX
-  * Filepath prefix to write output file.
+  * Filepath prefix to write output file. Extension will be dependent on the inclusion of --output-txt argument. By default the extension will be the same as the input object type. Default value is "output"
   
-##### example basic usage
+#### example basic usage
 
-###### from 10x output
+##### predict mode
 
-An example of running the single-cell cesc module with 10x .mtx.gz output folder
+An example of cell type prediction on a Seurat .RDS object
 ```bash
-pollock from_10x /diskmnt/Projects/Users/estorrs/pollock/modules/sc_cesc --counts-10x-filepath </filepath/to/cellranger/outs/raw_feature_bc_matrix> --output-prefix output --output-type txt
+pollock predict from_seurat --module-filepath <path_to_module_directory> --seurat-rds-filepath <filepath_to_RDS_object> --output-prefix output
 ```
 
-An example of running the single-cell cesc module with 10x .h5 output
+An example of cell type prediction on a Seurat .RDS object, but writing to a txt file instead of an RDS object
 ```bash
-pollock from_10x /diskmnt/Projects/Users/estorrs/pollock/modules/sc_cesc --counts-10x-filepath </filepath/to/cellranger/outs/raw_feature_bc_matrix.h5> --output-prefix output --output-type txt
+pollock predict from_seurat --module-filepath <path_to_module_directory> --seurat-rds-filepath <filepath_to_RDS_object> --output-prefix output --txt-output
 ```
 
-###### from seurat rds object
-
-An example of running the single-cell myeloma module with an rds object
+An example of cell type prediction on a scanpy .h5ad object
 ```bash
-pollock from_seurat /diskmnt/Projects/Users/estorrs/pollock/modules/sc_myeloma --seurat-rds-filepath </filepath/to/seurat/rds> --output-prefix output --output-type txt
+pollock predict from_scanpy --module-filepath <path_to_module_directory> --scanpy-h5ad-filepath <filepath_to_scanpy_h5ad> --output-prefix output
 ```
 
-##### from scanpy h5ad file
-
-An example of running the single-cell myeloma module with an scanpy .h5ad file
+An example of cell type prediction on cellranger output
 ```bash
-pollock from_scanpy /diskmnt/Projects/Users/estorrs/pollock/modules/sc_myeloma --scanpy-h5ad-filepath </filepath/to/scanpy/h5ad> --output-prefix output --output-type txt
+pollock predict from_10x --module-filepath <path_to_module_directory> --counts-10x-filepath </filepath/to/cellranger/outs/raw_feature_bc_matrix> --output-prefix output
 ```
 
-#### example basic usage within a docker container
+##### train mode
 
-Docker images are available at dockerhub under the image name estorrs/pollock-cpu. To pull the latest image run the following:
+An example of training a model on a Seurat .RDS object that has cell type labels in @active.idents slot. Note this is where cell type labels are typically stored in Seurat workflows.
 ```bash
-docker pull estorrs/pollock-cpu:0.0.9
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> 
 ```
 
-When using docker, input and ouput file directories need to be mounted as a volume using the docker -v argument.
-
-An example of running a module from within a docker container. Sections outlined by <> need to be replaced. Note filepaths in the -v flag must be absolute.
-
-ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
+An example of training a model on a Seurat .RDS object that has cell type labels stored in a metadata column named "my_special_cell_types".
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.9 pollock from_seurat /modules/<module_name> --seurat-rds-filepath /inputs/<filename.rds> --output-prefix /outputs/output --output-type txt
-```
-  
-#### Outputs
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key my_special_cell_types
 
-There are two possible output types:
-  * txt : tab seperated text file
-  * scanpy: a .h5ad file that can be loaded with scanpy
-  
-The following fields will be included in the output: predicted cell type, predicted cell type probability, and probabilities for each potential cell type in the module
+```
+
+An example of training a model on a Seurat .RDS object where cell type labels are in a file.
+```bash
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key <filepath_to_cell_labels>
+```
+
+
+An example of training a model on a Seurat .RDS object with custom model hyperparamters
+```bash
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object>  --alpha .0001 --epochs 20 --latent-dim 25 --n-per-cell-type 500
+```
+
+An example of training a model on a scanpy .h5ad object that has cell type labels stored in a column in .obs named "my_special_cell_types".
+```bash
+pollock train from_scanpy --module-filepath <path_to_write_output_module> --scanpy-h5ad-filepath <filepath_to_h5ad_object> --cell-type-key my_special_cell_types
+```
+
 
 
 ## docker
-Dockerfiles for running pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
+Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu
+docker pull estorrs/pollock-cpu:0.0.10
 ```
-To see usage with a docker container see the Usage - command line tool - docker section
+
+#### example basic usage of comand line tool within a docker container
+
+When using docker, the input and ouput file directories need to be mounted as a volume using the docker -v argument.
+
+Below is an example of predicting cell types from within a docker container. Sections outlined by <> need to be replaced. Note file and directory paths in the -v flag must be absolute. For more examples of how the pollock command line tool is used see the above usage examples.
+
+ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
+```bash
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.10 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+```

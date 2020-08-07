@@ -34,6 +34,15 @@ To install
 ```bash
 conda install -c epstorrs pollock==0.0.10
 ```
+
+NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
+
+```bash
+TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <path/to/directory> tensorflow==2.1.0
+```
+
+After that pollock should work correctly
+
 ## Usage
 
 Pollock uses deep learning to make cell type predictions. At it's core, pollock is build upon a deep learning technique called a Beta Variational Autoencoder (BVAE).
@@ -78,6 +87,7 @@ reticulate::use_python("<path/to/python/executable>")
 
 [example usage of rpollock on pbmc3k](https://github.com/ding-lab/pollock/blob/master/examples/rpollock_pbmc_prediction.Rmd)
 
+[This notebook](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb) is a python script walking over the information that is contained in each module. Though it is in python, all this information is saved in a json file so everything done in that notebook can also be done in R.
 
 ## Command line tool
 ```bash
@@ -181,12 +191,14 @@ pollock train from_seurat --module-filepath <path_to_write_output_module> --seur
 An example of training a model on a Seurat .RDS object that has cell type labels stored in a metadata column named "my_special_cell_types".
 ```bash
 pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key my_special_cell_types
+
 ```
 
 An example of training a model on a Seurat .RDS object where cell type labels are in a file.
 ```bash
 pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key <filepath_to_cell_labels>
 ```
+
 
 An example of training a model on a Seurat .RDS object with custom model hyperparamters
 ```bash

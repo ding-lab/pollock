@@ -35,7 +35,9 @@ To install
 conda install -c epstorrs pollock==0.0.10
 ```
 
-NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
+NOTE 1: pollock has a large number of both R and python dependencies, which may result in a failure of it to integrate into existing environments correctly. If you run into installation errors from conda, try installing pollock in a new conda virtual environment. We've found this solves the majority of installation/dependency problems that may come up.
+
+NOTE 2: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
 
 ```bash
 TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <path/to/directory> tensorflow==2.1.0

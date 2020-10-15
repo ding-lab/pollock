@@ -27,7 +27,7 @@ WORKDIR /pollock
 ## RUN pip install -e .
 ## 
 ## RUN pollock-setup from_seurat
-RUN conda install -y -c epstorrs pollock==0.0.8
+RUN conda install -y -c epstorrs pollock==0.0.10
 
 ## CMD /bin/bash
 CMD jupyter notebook --no-browser --allow-root --ip 0.0.0.0

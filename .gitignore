@@ -1,4 +1,7 @@
 notebooks/.ipynb_checkpoints/
+benchmarking/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
 *.egg-info/
 *.pyc
 output.tsv
@@ -8,6 +11,8 @@ output.tsv
 .Rhistory
 deploy.sh
 
+benchmarking/results/
+benchmarking/data/
 tests/
 examples/pbmc3k/
 examples/data/

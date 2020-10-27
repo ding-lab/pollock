@@ -13,6 +13,7 @@ deploy.sh
 
 benchmarking/results/
 benchmarking/data/
+benchmarking/sandbox/
 tests/
 examples/pbmc3k/
 examples/data/

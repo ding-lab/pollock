@@ -1,11 +1,12 @@
 import os
+import logging
 
 import anndata
 import pandas as pd
 import numpy as np
 import scanpy as sc
 
-from pollock.models.model import load_from_directory, PollockDataset, PollockModel
+from pollock.models.model import predict_from_anndata, PollockDataset, PollockModel
 
 def get_probability_df(labels, label_probs, probs, pds):
     """Return dataframe with labels and probabliities"""
@@ -32,10 +33,7 @@ def predict_from_dataframe(df, module_filepath):
     adata.obs.index = df.columns
     adata.var.index = df.index.to_list()
 
-    loaded_pds, loaded_pm = load_from_directory(adata, module_filepath) 
-    labels, label_probs, probs = loaded_pm.predict_pollock_dataset(loaded_pds, labels=True)
-
-    return get_probability_df(labels, label_probs, probs, loaded_pds)
+    return predict_from_anndata(adata, module_filepath)
 
 def fit_from_dataframe(df, labels, output_filepath, n_per_cell_type=500,
         alpha=.0001, latent_dim=100, epochs=25):
@@ -45,6 +43,7 @@ def fit_from_dataframe(df, labels, output_filepath, n_per_cell_type=500,
     adata.obs.index = df.columns
     adata.obs['cell_type'] = labels
     adata.var.index = df.index.to_list()
+    logging.info('fitting from dataframe')
 
     pds = PollockDataset(adata.copy(), cell_type_key='cell_type',
             n_per_cell_type=int(n_per_cell_type),

@@ -8,10 +8,13 @@ import pandas as pd
 import scanpy as sc
 
 import pollock
-from pollock.models.model import PollockDataset, PollockModel, load_from_directory
+from pollock.models.model import PollockDataset, PollockModel, predict_from_anndata
 from pollock.preprocessing.preprocessing import read_rds
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+
+logging.info('i am here')
+print('i am here')
 
 parser = argparse.ArgumentParser()
 
@@ -42,7 +45,7 @@ data matrix must be raw expression counts (i.e. not normalized)')
 
 ## optional arguments
 ## optional arguments for training mode
-parser.add_argument('--cell-type-key', type=str,
+parser.add_argument('--cell-type-key', type=str, default='',
         help='The key to use for training the pollock module. \
 The key can be one of the following: 1) A string representing a column in \
 the metadata of the input seurat object or .obs attribute of the scanpy anndata object, \
@@ -203,20 +206,10 @@ def main():
                 pass
             else:
                 raise RuntimeError(f'{args.source_type} is not a valid source_type')
-        
+
             logging.info('processing in counts and loading classification module')
-            min_genes_per_cell = None if args.source_type != 'from_10x' else args.min_genes_per_cell
             print(f'loading model from {args.module_filepath}')
-            loaded_pds, loaded_pm = load_from_directory(adata, args.module_filepath,
-                    min_genes_per_cell=min_genes_per_cell)
-        
-            logging.info('start cell prediction')
-            labels, label_probs, probs = loaded_pm.predict_pollock_dataset(loaded_pds,
-                    labels=True)
-            logging.info('finish cell prediction')
-        
-        
-            df = get_probability_df(labels, label_probs, probs, loaded_pds)
+            df = predict_from_anndata(adata, args.module_filepath)
         
             if args.txt_output:
                 output_fp = f'{args.output_prefix}.txt'

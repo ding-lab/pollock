@@ -17,7 +17,7 @@ write("starting workflow", stderr())
 ## raw_counts <- read.table(file=train_counts_fp, sep="\t")
 raw_counts <- read.table(
     file = train_counts_fp,
-    as.is = TRUE
+#    as.is = TRUE
 )
 write("is.na sum for training: ", stderr())
 write(sum(is.na(raw_counts)), stderr())

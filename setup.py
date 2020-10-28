@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     # $ pip install pollock
     name='dinglab-pollock',
-    version='0.0.10',
+    version='0.0.11',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -29,17 +29,18 @@ setup(
     packages=find_packages(),
     python_requires='>=3.6',
     install_requires=[
-        'scanpy>=1.4.4',
-        'pandas>=1.0.0',
-        'seaborn>=0.10.0',
-        'scipy==1.4.1',
-        'scikit-learn==0.22.1',
-        'tensorflow==2.1.0',
-        'numpy<1.19.0,>=1.16.0',
-        'jupyter',
-        'umap-learn>=0.3.10',
-        'loompy>=2.0.17',
-        'matplotlib>=3.2.1',
+## packages are installed through conda due to scanpy/seurat dependencies
+##         'scanpy>=1.4.4',
+##         'pandas>=1.0.0',
+##         'seaborn>=0.10.0',
+##         'scipy==1.4.1',
+##         'scikit-learn==0.22.1',
+##         'tensorflow==2.1.0',
+##         'numpy<1.19.0,>=1.16.0',
+##         'jupyter',
+##         'umap-learn>=0.3.10',
+##         'loompy>=2.0.17',
+##         'matplotlib>=3.2.1',
         ],
     include_package_data = True,
 

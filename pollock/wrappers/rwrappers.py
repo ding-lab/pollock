@@ -29,6 +29,7 @@ def predict_from_dataframe(df, module_filepath):
 
     rows are cell ids, cols are gene names
     """
+    logging.info('predicting from dataframe')
     adata = anndata.AnnData(X=df.values.transpose())
     adata.obs.index = df.columns
     adata.var.index = df.index.to_list()
@@ -47,7 +48,7 @@ def fit_from_dataframe(df, labels, output_filepath, n_per_cell_type=500,
 
     pds = PollockDataset(adata.copy(), cell_type_key='cell_type',
             n_per_cell_type=int(n_per_cell_type),
-            batch_size=64, dataset_type='training', log=True)
+            batch_size=64, dataset_type='training')
 
     pm = PollockModel(pds.cell_types, pds.train_adata.shape[1],
             alpha=alpha, latent_dim=int(latent_dim))

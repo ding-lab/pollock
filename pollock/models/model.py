@@ -49,7 +49,7 @@ def cap_list(ls, n=100, split=.8, oversample=True):
         return random.sample(ls, n)
 
     if oversample:
-        pool = random.sample(ls, cap)
+        pool = random.sample(ls, cap) if cap else list(ls)
         ## oversample to 
         return random.choices(pool, k=n)
 
@@ -258,14 +258,15 @@ class PollockDataset(object):
 
     def set_training_datasets(self):
         """Process datasets for training"""
-        logging.info(f'normalizing counts for model training')
+        logging.info(f'normalizing the expression counts for model training')
         self.adata, self.standard_scaler, self.range_scaler = process_from_counts(self.adata,
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
         self.genes = np.asarray(self.adata.var.index)
         logging.info(f'input dataset shape: {self.adata.shape}')
-        print(self.adata.shape)
 
-        logging.info(f'creating a kktf datasets')
+        logging.info(f'possible cell types: {sorted(set(self.adata.obs[self.cell_type_key]))}')
+        logging.info(f'possible cell types: {Counter(self.adata.obs[self.cell_type_key]).most_common()}')
+
         if self.val_key is None:
             self.train_adata, val_adata = balancedish_training_generator(self.adata,
                 self.cell_type_key, self.n_per_cell_type, oversample=self.oversample)
@@ -281,8 +282,8 @@ class PollockDataset(object):
         self.train_ds, self.val_ds = get_tf_datasets(self.train_adata, self.val_adata,
             train_buffer=10000, batch_size=self.batch_size)
 
-        logging.info('training dataset shape: {self.train_adata.shape}')
-        logging.info('validation dataset shape: {self.val_adata.shape}')
+        logging.info(f'training dataset shape: {self.train_adata.shape}')
+        logging.info(f'validation dataset shape: {self.val_adata.shape}')
 
         self.train_cell_ids = np.asarray(self.train_adata.obs.index)
         self.val_cell_ids = np.asarray(self.val_adata.obs.index)
@@ -577,7 +578,12 @@ class PollockModel(object):
     def get_cell_type_loss(self, cell_adata, n_per_cell_type):
         """Returns BVAE loss per cell type"""
         ## do training
-        cell_ids = np.asarray(
+        if not cell_adata.shape[0]: return 0.0
+        # if we are sufficiently small just use the whole thing
+        if cell_adata.shape[0] < 10:
+            cell_ids = cell_adata.obs.index
+        else:
+            cell_ids = np.asarray(
                 random.sample(list(cell_adata.obs.index), min(cell_adata.shape[0], n_per_cell_type)))
         if 'sparse' in str(type(cell_adata.X)).lower():
             X = cell_adata[cell_ids].X.toarray()
@@ -831,7 +837,8 @@ val loss: {val_loss.result()}')
         groundtruth_labels = [self.class_names[i] for i in groundtruth]
 
         report = classification_report(groundtruth,
-                predictions, target_names=self.class_names, output_dict=True)
+                predictions, target_names=self.class_names,
+                labels=list(range(len(self.class_names))), output_dict=True)
 
         c_df = pollock_analysis.get_confusion_matrix(predictions,
                 groundtruth, self.class_names, show=False)

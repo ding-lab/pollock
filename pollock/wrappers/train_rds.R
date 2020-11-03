@@ -1,11 +1,7 @@
-#!/usr/bin/Rscript --vanilla
-
 library(Seurat)
 library(rpollock)
 
 args = commandArgs(trailingOnly=TRUE)
-
-message(args)
 
 rds_fp = args[1]
 output_fp = args[2]
@@ -31,9 +27,10 @@ if (cell_key %in% colnames(sce)) {
     message(paste('looking for active.ident in object slot'))
     labels = sce@active.ident
 }
-message('labels loaded')
 
 ## save module
 message('creating module')
 create_module(sce@assays$RNA@counts, labels, output_fp, alpha=as.double(alpha), latent_dim=as.integer(latent_dim),
 	      epochs=as.integer(epochs), n_per_cell_type=as.integer(n_per_cell_type))
+
+

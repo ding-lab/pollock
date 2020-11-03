@@ -13,9 +13,6 @@ from pollock.preprocessing.preprocessing import read_rds
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
-logging.info('i am here')
-print('i am here')
-
 parser = argparse.ArgumentParser()
 
 parser.add_argument('mode', type=str,

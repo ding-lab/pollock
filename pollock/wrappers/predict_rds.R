@@ -11,9 +11,11 @@ output_fp = args[3]
 output_type = args[4]
 
 ## load data
+message('reading in RDS object')
 sce = readRDS((rds_fp))
 
 ## predict data
+message('predicting cell types')
 predictions = predict_cell_types(sce@assays$RNA@counts, module_dir)
 
 ## save output

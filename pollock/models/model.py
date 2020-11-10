@@ -356,6 +356,54 @@ def predict_from_anndata(adata, model_filepath, adata_batch_size=10000):
     return predictions
 
 
+def embed_from_anndata(adata, model_filepath,
+            adata_batch_size=10000):
+    """Convenience method to get BVAE cell embeddings from
+    AnnData object in one shot.
+
+    This method will optionally also batch the adata object
+    to avoid memory overflow issues.
+
+    Arguments
+    ---------
+    adata : anndata.AnnData
+        AnnData object holding single cell data. Expression counts
+        must be unnormalized
+    model_filepath : str
+        Path to saved Pollock module to use for prediction
+    adata_batch_size : int
+        will batch the adata objects into groups of
+        adata_batch_size cells to avoid memory overflow issues
+
+    Returns
+    -------
+    pandas.DataFrame
+        dataframe where each column corresponds to a position in the
+        BVAE latent embedding and each row is a cell.
+    """
+    _, pm = load_from_directory(adata[:100].copy(), model_filepath)
+
+    embeddings = None
+    n, c = adata.shape[0], 0
+    for i in range(0, n, adata_batch_size):
+        c += 1
+        logging.info(f'starting batch {c} of {int(n/adata_batch_size) + 1}')
+        tiny = adata[i:i + adata_batch_size]
+        (cell_types, genes, summary, standard_scaler,
+            range_scaler, encoder, clf) = parse_module_directory(model_filepath)
+        pds = PollockDataset(tiny, batch_size=64, dataset_type='prediction',
+                standard_scaler=standard_scaler, range_scaler=range_scaler,
+                genes=genes, cell_type_encoder=encoder, cell_types=cell_types)
+        cell_embeddings = pm.get_cell_embeddings(pds.prediction_ds)
+        df = pd.DataFrame(data=cell_embeddings, index=tiny.obs.index,
+                columns=[f'CELL_EMBEDDING_{x+1}' for x in range(cell_embeddings.shape[1])])
+        if embeddings is None:
+            embeddings = df
+        else:
+            embeddings = pd.concat((embeddings, df))
+    return embeddings
+
+
 def parse_module_directory(model_filepath):
     """Parses relavent info from the saved module directory"""
     cell_types = np.load(os.path.join(model_filepath, CELL_TYPES_PATH), allow_pickle=True)

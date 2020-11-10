@@ -7,6 +7,7 @@ import numpy as np
 import scanpy as sc
 
 from pollock.models.model import predict_from_anndata, PollockDataset, PollockModel
+from pollock.models.explain import explain_predictions
 
 def get_probability_df(labels, label_probs, probs, pds):
     """Return dataframe with labels and probabliities"""
@@ -56,3 +57,20 @@ def fit_from_dataframe(df, labels, output_filepath, n_per_cell_type=500,
     pm.fit(pds, epochs=int(epochs))
 
     pm.save(pds, output_filepath)
+
+def explain_from_dataframe(explain, background, labels, module_fp,
+        background_sample_size=100):
+    """Explain predictions from dataframe"""
+    explain_adata = anndata.AnnData(X=explain.values.transpose())
+    explain_adata.obs.index = explain.columns
+    explain_adata.obs['cell_type'] = labels
+    explain_adata.var.index = explain.index.to_list()
+
+    background_adata = anndata.AnnData(X=background.values.transpose())
+    background_adata.obs.index = background.columns
+    background_adata.var.index = background.index.to_list()
+
+    df = explain_predictions(explain_adata, background_adata, module_fp,
+            prediction_key='cell_type', n_background_cells=background_sample_size)
+    df.index.name = 'cell_id'
+    return df

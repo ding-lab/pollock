@@ -17,7 +17,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 parser = argparse.ArgumentParser()
 
 parser.add_argument('mode', type=str,
-        help='What task/mode is pollock to perform. Valid values are the following: \
+        help='What task is pollock to perform. Valid values are the following: \
 [train, predict, explain]')
 
 parser.add_argument('source_type', type=str,
@@ -39,37 +39,6 @@ experiment matrix must be raw expression counts (i.e. not normalized)')
 parser.add_argument('--scanpy-h5ad-filepath', type=str,
         help='A saved .h5ad file to use for classification. scanpy \
 data matrix must be raw expression counts (i.e. not normalized)')
-
-
-########################
-## optional arguments ##
-########################
-
-## optional arguments for training mode
-parser.add_argument('--cell-type-key', type=str, default='',
-        help='The key to use for training the pollock module. \
-The key can be one of the following: 1) A string representing a column in \
-the metadata of the input seurat object or .obs attribute of the scanpy anndata object, \
-or 2) filepath to a .txt file where each line is a cell type label. The number of lines \
-must be equal to the number of cells in the input object. The cell types must \
-also be in the same order as the cells in the input object. By default if the \
-input is a Seurat object pollock will use cell type labels in @active.ident, or \
-if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
-parser.add_argument('--alpha', type=float, default=.0001,
-        help='This parameter controls how regularized the BVAE is. .0001 is the default. \
-If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. \
-If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable')
-parser.add_argument('--epochs', type=int, default=20,
-        help='Number of epochs to train the neural net for. Default is 20.')
-parser.add_argument('--latent-dim', type=int, default=25,
-        help='Size of hidden layer in the B-VAE. Default is 25.')
-parser.add_argument('--n-per-cell-type', type=int, default=500,
-        help='The number of cells per cell type that should be included in the training dataset. \
-Typically this number will be somewhere between 500-2000. The default is 500. \
-If you have a particular cell type in your dataset that has a low cell count it is usually a \
-good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type \
-should be no greater than the minimum cell type count * 10.')
-
 
 ## optional arguments for prediction mode
 ## 10x specific parameters
@@ -120,6 +89,38 @@ parser.add_argument('--background-sample-size', type=int, default=100,
     help='Number of cells to sample as background samples from object at --background-filepath \
 The default of 100 cells is sufficient in most use cases. A larger sample size results in longer \
 run times, but increased accuracy.')
+
+
+########################
+## optional arguments ##
+########################
+
+## optional arguments for training mode
+parser.add_argument('--cell-type-key', type=str, default='',
+        help='The key to use for training the pollock module. \
+The key can be one of the following: 1) A string representing a column in \
+the metadata of the input seurat object or .obs attribute of the scanpy anndata object, \
+or 2) filepath to a .txt file where each line is a cell type label. The number of lines \
+must be equal to the number of cells in the input object. The cell types must \
+also be in the same order as the cells in the input object. By default if the \
+input is a Seurat object pollock will use cell type labels in @active.ident, or \
+if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
+parser.add_argument('--alpha', type=float, default=.0001,
+        help='This parameter controls how regularized the BVAE is. .0001 is the default. \
+If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. \
+If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable')
+parser.add_argument('--epochs', type=int, default=20,
+        help='Number of epochs to train the neural net for. Default is 20.')
+parser.add_argument('--latent-dim', type=int, default=25,
+        help='Size of hidden layer in the B-VAE. Default is 25.')
+parser.add_argument('--n-per-cell-type', type=int, default=500,
+        help='The number of cells per cell type that should be included in the training dataset. \
+Typically this number will be somewhere between 500-2000. The default is 500. \
+If you have a particular cell type in your dataset that has a low cell count it is usually a \
+good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type \
+should be no greater than the minimum cell type count * 10.')
+
+
 
 args = parser.parse_args()
 

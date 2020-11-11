@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     # $ pip install pollock
     name='dinglab-pollock',
-    version='0.0.11',
+    version='0.0.12',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -23,31 +23,18 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
-    keywords='single cell classification expression machine learning deep learning',  # Optional
-    #packages=find_packages(exclude=['tests']),
+    keywords='single cell classification expression machine learning deep learning',
     packages=find_packages(),
     python_requires='>=3.6',
     install_requires=[
-## packages are installed through conda due to scanpy/seurat dependencies
-##         'scanpy>=1.4.4',
-##         'pandas>=1.0.0',
-##         'seaborn>=0.10.0',
-##         'scipy==1.4.1',
-##         'scikit-learn==0.22.1',
-##         'tensorflow==2.1.0',
-##         'numpy<1.19.0,>=1.16.0',
-##         'jupyter',
-##         'umap-learn>=0.3.10',
-##         'loompy>=2.0.17',
-##         'matplotlib>=3.2.1',
         ],
-    include_package_data = True,
+    include_package_data=True,
 
-    entry_points={ 
+    entry_points={
         'console_scripts': [
             'pollock=pollock.pollock:main',
-##             'pollock-setup=pollock.pollock_setup:main',
         ],
-   },
+    },
 )

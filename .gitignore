@@ -21,4 +21,3 @@ conda_build/
 dist/
 results/
 models/
-data/

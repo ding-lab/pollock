@@ -1,5 +1,5 @@
 {% set name = "dinglab-pollock" %}
-{% set version = "0.0.12" %}
+{% set version = "0.0.13" %}
 
 package:
 ##   name: "{{ name|lower }}"
@@ -8,7 +8,7 @@ package:
 
 source:
   url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
-  sha256: 0f11aee5293caa0e14a98e5a027496ce9e71b6973f4d950d8f31ceb4daf77f7e
+  sha256: b83b1f5fa53a83661f695b8e18ab02cc7f33a500a6d85573570bf4df3b365b8e
 
 build:
   number: 0

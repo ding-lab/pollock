@@ -134,6 +134,7 @@ def test_explain_from_scanpy():
             '--background-filepath', SCANPY_SMALL_H5AD_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
             '--output-prefix', OUTPUT_PREFIX,
+            '--predicted-key', 'cell_type',
             '--background-sample-size', '10')
     subprocess.check_output(command)
 

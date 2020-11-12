@@ -50,6 +50,7 @@ def get_confusion_matrix(predicted_labels, true_labels, classes, show=True):
     con_mat = tf.math.confusion_matrix(labels=true_labels, predictions=predicted_labels).numpy()
     con_mat_norm = np.around(con_mat.astype('float') / con_mat.sum(axis=1)[:, np.newaxis], decimals=2)
 ##     classes = [k for k, v in sorted(d.items(), key=lambda x: x[1])]
+    # identify labels not in classes
     con_mat_df = pd.DataFrame(con_mat_norm, index=classes, columns=classes)
 
     if show:

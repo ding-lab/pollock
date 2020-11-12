@@ -140,7 +140,6 @@ def process_from_counts(adata, standard_scaler=None, range_scaler=None):
 
 def filter_adata_genes(adata, genes):
     """Removes genes from adata not found in train genes list"""
-    logging.info('filtering for genes in training set')
     training_genes = set(genes)
     prediction_genes = set(adata.var.index)
     missing = list(training_genes - prediction_genes)
@@ -241,12 +240,12 @@ class PollockDataset(object):
             self.set_prediction_dataset()
         else:
             self.cell_type_key = cell_type_key
-            self.cell_types = sorted(set(self.adata.obs[self.cell_type_key]))
+            self.cell_types = None
             self.oversample = oversample
-            self.cell_type_encoder = OrdinalEncoder(categories=[self.cell_types])
+            self.cell_type_encoder = None
             self.n_per_cell_type = n_per_cell_type
             self.val_max_n_per_cell_type = val_max_n_per_cell_type
-            self.val_key = None
+            self.val_key = validation_key
             self.train_adata = None
             self.val_adata = None
             self.train_ds = None
@@ -258,14 +257,12 @@ class PollockDataset(object):
 
     def set_training_datasets(self):
         """Process datasets for training"""
-        logging.info(f'normalizing the expression counts for model training')
         self.adata, self.standard_scaler, self.range_scaler = process_from_counts(self.adata,
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
         self.genes = np.asarray(self.adata.var.index)
         logging.info(f'input dataset shape: {self.adata.shape}')
 
         logging.info(f'possible cell types: {sorted(set(self.adata.obs[self.cell_type_key]))}')
-        logging.info(f'possible cell types: {Counter(self.adata.obs[self.cell_type_key]).most_common()}')
 
         if self.val_key is None:
             self.train_adata, val_adata = balancedish_training_generator(self.adata,
@@ -274,28 +271,29 @@ class PollockDataset(object):
             self.val_adata, _ = balancedish_training_generator(val_adata,
                 self.cell_type_key, self.val_max_n_per_cell_type, oversample=False,
                 split=1.)
-
         else:
-            self.train_adata = self.adata[~self.adata[self.val_key]]
-            self.val_adata = self.adata[self.adata[self.val_key]]
+            logging.info('using validation key')
+            self.train_adata = self.adata[~self.adata.obs[self.val_key]]
+            self.val_adata = self.adata[self.adata.obs[self.val_key]]
+
+        self.cell_types = sorted(set(self.train_adata.obs[self.cell_type_key]))
+        self.cell_type_encoder = OrdinalEncoder(categories=[self.cell_types])
 
         self.train_ds, self.val_ds = get_tf_datasets(self.train_adata, self.val_adata,
             train_buffer=10000, batch_size=self.batch_size)
-
-        logging.info(f'training dataset shape: {self.train_adata.shape}')
-        logging.info(f'validation dataset shape: {self.val_adata.shape}')
 
         self.train_cell_ids = np.asarray(self.train_adata.obs.index)
         self.val_cell_ids = np.asarray(self.val_adata.obs.index)
 
         self.y_train = np.asarray(self.train_adata.obs[self.cell_type_key])
         self.y_train = self.cell_type_encoder.fit_transform(self.y_train.reshape(-1, 1)).flatten()
-        self.y_val = np.asarray(self.val_adata.obs[self.cell_type_key])
+        # just artificially assign a zero label for cells in validation that arent in training
+        self.y_val = np.asarray([x if x in self.cell_types else self.cell_types[0] 
+                for x in self.val_adata.obs[self.cell_type_key]])
         self.y_val = self.cell_type_encoder.transform(self.y_val.reshape(-1, 1)).flatten()
 
     def set_prediction_dataset(self):
         """process dataset for prediction"""
-        logging.info(f'normalizing counts for prediction')
         self.prediction_adata = filter_adata_genes(self.adata, self.genes)
         self.prediction_adata, _, _ = process_from_counts(self.prediction_adata,
                 standard_scaler=self.standard_scaler, range_scaler=self.range_scaler)
@@ -732,9 +730,10 @@ class PollockModel(object):
                 ## validation
                 adata, _ = balancedish_training_generator(pollock_dataset.val_adata,
                         pollock_dataset.cell_type_key, n_per_cell_type=metric_n_per_cell_type)
-                y = pollock_dataset.cell_type_encoder.transform(
-                        adata.obs[pollock_dataset.cell_type_key].to_numpy().reshape(
-                            (-1, 1))).flatten()
+                y = [x if x in self.class_names else self.class_names[0] 
+                        for x in adata.obs[pollock_dataset.cell_type_key]]
+                y = pollock_dataset.cell_type_encoder.transform(np.asarray(y).reshape(
+                        (-1, 1))).flatten()
                 X = batch_adata(adata, n=pollock_dataset.batch_size)
                 _, report = self.get_cell_type_accuracy(X, y,
                         clf=clf)
@@ -816,6 +815,12 @@ val loss: {val_loss.result()}')
             whether to score training data and save with PollockModel
         metadata : dict, None
             dictionary storing metadata associated with PollockModel
+        generate_metrics : bool
+            Whether to generate classification metrics. If validating
+            on data with different cell labels training data this can
+            be set to true to avoid attempting to compare them, as there
+            are some metrics/algorithms that require matching cell type
+            labels between the training and prediction data
         """
         ## create directory if does not exist
         if not os.path.isdir(filepath):
@@ -888,6 +893,7 @@ val loss: {val_loss.result()}')
                 predictions, target_names=self.class_names,
                 labels=list(range(len(self.class_names))), output_dict=True)
 
+        # if we need to 
         c_df = pollock_analysis.get_confusion_matrix(predictions,
                 groundtruth, self.class_names, show=False)
 

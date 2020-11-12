@@ -10,12 +10,9 @@ RUN conda config --add channels defaults
 RUN conda config --add channels bioconda
 RUN conda config --add channels conda-forge
 
+RUN echo 'hello'
 
-
-RUN conda install tar
-RUN conda install -c r r-stringi
-ENV TAR="/bin/tar"
-RUN conda install -c epstorrs pollock==0.0.10
+RUN conda install -c epstorrs pollock==0.0.12
 
 ENV RETICULATE_PYTHON="/miniconda/bin/python"
 

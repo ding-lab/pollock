@@ -6,6 +6,7 @@ tests/modules/
 tests/outputs/
 tests/
 examples/
+benchmarking/
 
 *.tfcache*
 notebooks/cache/

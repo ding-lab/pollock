@@ -24,6 +24,7 @@ requirements:
     - pandas >=1.0.0
     - pip
     - python
+    - tar
     - scanpy >=1.4.4
     - scikit-learn ==0.23.1
     - scipy ==1.4.1
@@ -40,6 +41,7 @@ requirements:
     - pandas >=1.0.0
     - python
     - pip
+    - tar
     - scanpy >=1.4.4
     - scikit-learn ==0.23.1
     - scipy ==1.4.1
@@ -54,6 +56,7 @@ test:
     - pollock.models
     - pollock.preprocessing
     - pollock.wrappers
+    - pollock.wrappers.rwrappers
   commands:
     - pollock --help
 

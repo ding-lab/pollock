@@ -8,13 +8,12 @@ package:
 
 source:
   url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
-  sha256: effcde1e237585522f252fb6fdc9244d032bd1804830307d7d40fb8e4d439282
+  sha256: 0f11aee5293caa0e14a98e5a027496ce9e71b6973f4d950d8f31ceb4daf77f7e
 
 build:
   number: 0
   entry_points:
     - pollock=pollock.pollock:main
-##     - pollock-setup=pollock.pollock_setup:main
   script: "{{ PYTHON }} -m pip install . -vv"
 
 requirements:
@@ -30,6 +29,7 @@ requirements:
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10
+    - shap
     - r-seurat >=3.0.2
     - r-devtools >=2.3.0
 
@@ -45,6 +45,7 @@ requirements:
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10
+    - shap
     - r-seurat >=3.0.2
     - r-devtools >=2.3.0
 test:

@@ -4,28 +4,21 @@ benchmarking/.ipynb_checkpoints/
 
 *.egg-info/
 *.pyc
-output.tsv
 .DS_Store
 *.tfcache*
 .RData
 .Rhistory
-deploy.sh
 
 benchmarking/results/
 benchmarking/data/
 benchmarking/sandbox/
-tests/
 examples/pbmc3k/
 examples/data/
 examples/modules/
 conda_builds/
 build/
+conda_build/
 dist/
-data/
-tests/data/
-tests/outputs/
 results/
-scratch/
 models/
-figures/
-modules/
+data/

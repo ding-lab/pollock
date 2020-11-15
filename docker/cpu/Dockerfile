@@ -12,7 +12,8 @@ RUN conda config --add channels conda-forge
 
 RUN echo 'hello'
 
-RUN conda install -c epstorrs pollock==0.0.12
+RUN conda install -c epstorrs pollock==0.0.13
+RUN pip install 'h5py<3.0.0'
 
 ENV RETICULATE_PYTHON="/miniconda/bin/python"
 

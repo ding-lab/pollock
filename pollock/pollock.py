@@ -141,8 +141,11 @@ def load_10x():
         return sc.read_10x_h5(args.counts_10x_filepath)
     else:
         logging.info('reading in .mtx.gz file')
-        return sc.read_10x_mtx(args.counts_10x_filepath,
+        adata = sc.read_10x_mtx(args.counts_10x_filepath,
                 var_names='gene_symbols')
+        adata.var_names_make_unique()
+        sc.pp.filter_cells(adata, min_genes=args.min_genes_per_cell)
+        return adata
 
 
 def load_seurat():

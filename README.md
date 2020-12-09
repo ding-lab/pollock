@@ -217,7 +217,7 @@ pollock train from_scanpy --module-filepath <path_to_write_output_module> --scan
 ## docker
 Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.0.10
+docker pull estorrs/pollock-cpu:0.0.14
 ```
 
 #### example basic usage of comand line tool within a docker container

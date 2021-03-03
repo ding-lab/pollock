@@ -81,6 +81,22 @@ def balancedish_training_generator(adata, cell_type_key, n_per_cell_type,
 
     return train_adata, val_adata
 
+
+def balance_adata(adata, key):
+    """Oversample imbalanced classes so each group (specified by key)
+    has the same number of cells per group"""
+    n = Counter(adata.obs[key]).most_common()[0][1]
+    idxs = []
+    for k in sorted(set(adata.obs[key])):
+        filtered = adata[adata.obs[key]==k]
+        ids = filtered.obs.index.to_list()
+        if len(ids) >= n:
+            idxs += ids
+        else:
+            idxs += list(np.random.choice(ids, n, replace=True))
+    return adata[idxs]
+
+
 def get_tf_datasets(train_adata, val_adata, train_buffer=10000, batch_size=32):
     """Return tf datasets for traiing and validation data"""
     if 'sparse' in str(type(train_adata.X)).lower():
@@ -351,6 +367,7 @@ def predict_from_anndata(adata, model_filepath, adata_batch_size=10000):
             predictions = df
         else:
             predictions = pd.concat((predictions, df))
+    predictions.index.name = 'cell_id'
     return predictions
 
 
@@ -495,7 +512,7 @@ class BVAE(tf.keras.Model):
     def reparameterize(self, mean, logvar):
         eps = tf.random.normal(shape=mean.shape)
         return eps * tf.exp(logvar * .5) + mean
-    
+
     def decode(self, z, apply_sigmoid=False):
         logits = self.generative_net(z)
         if apply_sigmoid:
@@ -607,7 +624,7 @@ class PollockModel(object):
         embeddings = None
         for X in ds:
             mean, logvar = self.model.encode(X)
-            emb = self.model.reparameterize(mean, logvar).numpy()
+            emb = mean
             if embeddings is None:
                 embeddings = emb
             else:
@@ -631,6 +648,7 @@ class PollockModel(object):
         else:
             cell_ids = np.asarray(
                 random.sample(list(cell_adata.obs.index), min(cell_adata.shape[0], n_per_cell_type)))
+
         if 'sparse' in str(type(cell_adata.X)).lower():
             X = cell_adata[cell_ids].X.toarray()
         else:

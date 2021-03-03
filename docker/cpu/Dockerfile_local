@@ -1,0 +1,30 @@
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get install -y vim wget curl
+
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-py37_4.8.3-Linux-x86_64.sh -O ~/miniconda.sh
+RUN bash ~/miniconda.sh -b -p /miniconda
+ENV PATH="/miniconda/bin:$PATH"
+
+RUN conda config --add channels defaults
+RUN conda config --add channels bioconda
+RUN conda config --add channels conda-forge
+
+COPY . /pollock
+WORKDIR /pollock
+
+RUN conda install scanpy shap
+
+RUN pip install -r requirements.txt
+
+RUN conda install -y r-seurat>=3.0.2 r-devtools
+
+RUN R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
+
+RUN pip install tensorflow==2.1.0 'h5py<3.0.0'
+
+RUN python3 -m pip install -e .
+
+ENV RETICULATE_PYTHON="/miniconda/bin/python"
+
+CMD /bin/bash

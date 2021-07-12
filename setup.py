@@ -6,13 +6,13 @@ import subprocess
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+with open(path.join(here, 'README.md')) as f:
     long_description = f.read()
 
 setup(
     # $ pip install pollock
     name='dinglab-pollock',
-    version='0.0.14',
+    version='0.0.15',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',

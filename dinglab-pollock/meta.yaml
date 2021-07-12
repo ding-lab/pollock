@@ -1,5 +1,5 @@
 {% set name = "dinglab-pollock" %}
-{% set version = "0.0.10" %}
+{% set version = "0.0.14" %}
 
 package:
 ##   name: "{{ name|lower }}"
@@ -8,43 +8,46 @@ package:
 
 source:
   url: "https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz"
-  sha256: effcde1e237585522f252fb6fdc9244d032bd1804830307d7d40fb8e4d439282
+  sha256: f5bfce77d753eadf694599a94bb7d0826c5a993c610ead84d50fed87cdcf45e1 
 
 build:
   number: 0
   entry_points:
     - pollock=pollock.pollock:main
-##     - pollock-setup=pollock.pollock_setup:main
   script: "{{ PYTHON }} -m pip install . -vv"
 
 requirements:
   host:
     - jupyter
-    - loompy >=2.0.17
+    - pytest
     - matplotlib >=3.2.1
     - pandas >=1.0.0
     - pip
     - python
+    - tar
     - scanpy >=1.4.4
     - scikit-learn ==0.23.1
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10
+    - shap
     - r-seurat >=3.0.2
     - r-devtools >=2.3.0
 
   run:
     - jupyter
-    - loompy >=2.0.17
+    - pytest
     - matplotlib >=3.2.1
     - pandas >=1.0.0
     - python
     - pip
+    - tar
     - scanpy >=1.4.4
     - scikit-learn ==0.23.1
     - scipy ==1.4.1
     - seaborn >=0.10.0
     - umap-learn >=0.3.10
+    - shap
     - r-seurat >=3.0.2
     - r-devtools >=2.3.0
 test:
@@ -55,7 +58,6 @@ test:
     - pollock.wrappers
   commands:
     - pollock --help
-##     - pollock-setup --help
 
 about:
   home: "https://github.com/ding-lab/pollock"
@@ -68,4 +70,4 @@ about:
 
 extra:
   recipe-maintainers:
-    - your-github-id-here
+    - estorrs

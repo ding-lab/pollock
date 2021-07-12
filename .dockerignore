@@ -1,11 +1,8 @@
 models/
 data/
 modules/
-tests/data/
-tests/modules/
-tests/outputs/
-tests/
 examples/
+benchmarking/
 
 *.tfcache*
 notebooks/cache/

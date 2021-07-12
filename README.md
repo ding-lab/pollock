@@ -16,34 +16,35 @@ In Development
 * Python3.6 or later
 
 * Anaconda/Conda
-  * Working installation of conda and [bioconda](https://bioconda.github.io/). If you are new to conda and bioconda, we recommend following the getting started page [here](https://bioconda.github.io/user/install.html)
+  * Working installation of conda is required
 
 #### To install
 
-pollock is available through the conda package manager.
+pollock is available through the conda package manager as an environmental file
 
-In addition to the default conda channels, pollock requires bioconda. In particular to ensure proper installation you must have your conda channels set up in the correct order by running the following:
-```bash
-conda config --add channels defaults
-conda config --add channels bioconda
-conda config --add channels conda-forge
-```
-
-To install
+First, download the Pollock repo
 
 ```bash
-conda install -c epstorrs pollock==0.0.10
+git clone https://github.com/ding-lab/pollock.git
 ```
 
-NOTE 1: pollock has a large number of both R and python dependencies, which may result in a failure of it to integrate into existing environments correctly. If you run into installation errors from conda, try installing pollock in a new conda virtual environment. We've found this solves the majority of installation/dependency problems that may come up.
+Then, create a conda environment from the environmental file within the Pollock repository.
 
-NOTE 2: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
+```bash
+conda env create --file env.yaml
+```
+
+If you intend to run Pollock off .RDS Seurat single cell objects you will also need to install the rpollock R library with the following command. For additional information about running with R, see the Usage - R section below.
+
+```bash
+R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
+```
+
+NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error that tensorflow is not available you will have to install it manually using a directory with enough space (> 2GB should be sufficient) with the following command.
 
 ```bash
 TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <path/to/directory> tensorflow==2.1.0
 ```
-
-After that pollock should work correctly
 
 ## Usage
 
@@ -217,7 +218,7 @@ pollock train from_scanpy --module-filepath <path_to_write_output_module> --scan
 ## docker
 Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.0.14
+docker pull estorrs/pollock-cpu:0.0.15
 ```
 
 #### example basic usage of comand line tool within a docker container
@@ -228,5 +229,5 @@ Below is an example of predicting cell types from within a docker container. Sec
 
 ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.10 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.15 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
 ```

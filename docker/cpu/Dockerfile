@@ -1,20 +1,18 @@
 FROM ubuntu:18.04
 
-RUN apt-get update && apt-get install -y vim wget curl
+RUN apt-get update && apt-get install -y vim wget curl git
 
 RUN wget https://repo.anaconda.com/miniconda/Miniconda3-py37_4.8.3-Linux-x86_64.sh -O ~/miniconda.sh
 RUN bash ~/miniconda.sh -b -p /miniconda
 ENV PATH="/miniconda/bin:$PATH"
 
-RUN conda config --add channels defaults
-RUN conda config --add channels bioconda
-RUN conda config --add channels conda-forge
+RUN git clone https://github.com/ding-lab/pollock.git
+RUN conda env create --file pollock/env.yaml
 
-RUN echo 'hello'
+RUN /miniconda3/envs/pollock/bin/R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
+ENV RETICULATE_PYTHON="/miniconda/envs/pollock/bin/python"
 
-RUN conda install -c epstorrs pollock==0.0.14
-RUN pip install 'h5py<3.0.0'
-
-ENV RETICULATE_PYTHON="/miniconda/bin/python"
+# make sure we use the right python
+ENV PATH="/miniconda/envs/pollock/bin:$PATH"
 
 CMD /bin/bash

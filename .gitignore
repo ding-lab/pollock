@@ -12,6 +12,7 @@ benchmarking/.ipynb_checkpoints/
 benchmarking/results/
 benchmarking/data/
 benchmarking/sandbox/
+benchmarking/*.txt
 examples/pbmc3k/
 examples/data/
 examples/modules/
@@ -21,3 +22,4 @@ conda_build/
 dist/
 results/
 models/
+figures/

@@ -279,7 +279,6 @@ Dockerfiles for pollock can be found in the `docker/` directory. They can also b
 docker pull estorrs/pollock-cpu:0.1,0
 ```
 
-
 ###### example basic usage of comand line tool within a docker container
 
 When using docker, the input and ouput file directories need to be mounted as a volume using the docker -v argument.
@@ -289,4 +288,11 @@ Below is an example of predicting cell types from within a docker container. Sec
 ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
 docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.1.0 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+```
+
+### Testing
+
+To run Pollock tests navigate to the tests/ directory and run
+```bash
+pytest -vv test_pollock.py
 ```

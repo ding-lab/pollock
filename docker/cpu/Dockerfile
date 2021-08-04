@@ -9,10 +9,9 @@ ENV PATH="/miniconda/bin:$PATH"
 RUN git clone https://github.com/ding-lab/pollock.git
 RUN conda env create --file pollock/env.yaml
 
-RUN /miniconda3/envs/pollock/bin/R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
-ENV RETICULATE_PYTHON="/miniconda/envs/pollock/bin/python"
-
-# make sure we use the right python
 ENV PATH="/miniconda/envs/pollock/bin:$PATH"
+
+RUN R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
+ENV RETICULATE_PYTHON="/miniconda/envs/pollock/bin/python"
 
 CMD /bin/bash

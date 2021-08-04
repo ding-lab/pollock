@@ -16,6 +16,7 @@ benchmarking/*.txt
 examples/pbmc3k/
 examples/data/
 examples/modules/
+dinglab-pollock/
 conda_builds/
 build/
 conda_build/

@@ -28,10 +28,11 @@ First, download the Pollock repo
 git clone https://github.com/ding-lab/pollock.git
 ```
 
-Then, create a conda environment from the environmental file within the Pollock repository.
+Then, create a conda environment from the environmental file within the Pollock repository and activate the conda environment.
 
 ```bash
 conda env create --file env.yaml
+conda activate pollock
 ```
 
 If you intend to run Pollock off .RDS Seurat single cell objects you will also need to install the rpollock R library with the following command. For additional information about running with R, see the Usage - R section below.

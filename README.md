@@ -273,7 +273,7 @@ An example of explaining a model on a Scanpy .h5ad object that has cell type lab
 pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --background-filepath <path_to_background_h5ad> --module-filepath <path_to_pollock_module> --predicted-key cell_type --output-prefix <path_to_write_output>
 ```
 
-#### docker
+#### Docker
 Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
 docker pull estorrs/pollock-cpu:0.1,0

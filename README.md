@@ -56,20 +56,40 @@ Additionally, if you have annotated single cell data, pollock can also be used t
 
 ### Modules
 
-There are a variety of modules available for cell type classification. They can be found on the dinglab cluster at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+There are a variety of modules available for cell type classification. They can be found on the dinglab cluster at https://zenodo.org/record/5155939#.YQqxbxNKi-Y
 
-To list available modules run
-```bash
-ls /diskmnt/Projects/Users/estorrs/pollock/modules
-```
+The following is a list of available pretrained modules:
+  * scRNA-seq
+    * disease_specific_brca_scRNAseq
+    * disease_specific_cesc_scRNAseq
+    * disease_specific_hnscc_scRNAseq
+    * disease_specific_melanoma_scRNAseq
+    * disease_specific_mmy_scRNAseq
+    * disease_specific_pdac_scRNAseq
+    * general_scRNAseq
+    * panimmune_scRNAseq
+    * HCA_bone_marrow_scRNAseq
+  * snRNAseq
+    * disease_specific_brca_snRNAseq
+    * disease_specific_gbm_snRNAseq
+    * disease_specific_ccrcc_snRNAseq
+    * general_snRNAseq
+  * snATACseq
+    * disease_specific_brca_snATACseq_gene_activity
+    * disease_specific_brca_snATACseq_motif
+    * disease_specific_ccrcc_snATACseq_gene_activity
+    * disease_specific_ccrcc_snATACseq_motif
+    * disease_specific_gbm_snATACseq_gene_activity
+    * disease_specific_gbm_snATACseq_motif
+    * general_snATACseq
 
-You can also create new modules with pollock (see below)
+You can also create new modules with pollock (see training section below)
 
 #### Python
 
 [module training tutorial on pbmc dataset](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_model_training.ipynb)
 
-[prediction with an existing module](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_module_prediction.ipynb)
+[prediction and feature explaination with an existing module](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_module_prediction.ipynb)
 
 [module examination](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb)
 
@@ -97,12 +117,16 @@ reticulate::use_python("<path/to/python/executable>")
 usage: pollock [-h] [--module-filepath MODULE_FILEPATH]
                [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
                [--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH]
-               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
-               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
-               [--n-per-cell-type N_PER_CELL_TYPE]
                [--counts-10x-filepath COUNTS_10X_FILEPATH]
                [--min-genes-per-cell MIN_GENES_PER_CELL] [--txt-output]
                [--output-prefix OUTPUT_PREFIX]
+               [--explain-filepath EXPLAIN_FILEPATH]
+               [--background-filepath BACKGROUND_FILEPATH]
+               [--predicted-key PREDICTED_KEY]
+               [--background-sample-size BACKGROUND_SAMPLE_SIZE]
+               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
+               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
+               [--n-per-cell-type N_PER_CELL_TYPE]
                mode source_type
 ```
 
@@ -112,14 +136,16 @@ mode
   * What task/mode is pollock to perform. Valid arguments are:
     * train
     * predict
+    * explain
 
 source_type
   * Input source type. Possible values are: from_seurat, from_10x, from_scanpy.
 
   
 module_filepath
-  * If in prediction mode, this is the filepath to module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+  * If in prediction mode, this is the filepath to module to use for classification. Pretrained modules can be downloaded here https://zenodo.org/record/5155939#.YQqxbxNKi-Y
   * If in training mode, this is the filepath where pollock will save the trained module.
+  * If in explain mode, this is the filepath to the module to use to explain the given pollock predictions.
 
 ###### mode specific arguments
 
@@ -137,7 +163,7 @@ module_filepath
   * The key to use for training the pollock module. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type label. The number of lines must be equal to the number of cells in the input object. The cell types must also be in the same order as the cells in the input object. By default if the input is a Seurat object pollock will use cell type labels in @active.ident, or if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].
   
 --alpha ALPHA
-  * This parameter controls how regularized the BVAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+  * This parameter controls how regularized the VAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
 
 --epochs EPOCHS
   * Number of epochs to train the neural net for. Default is 20.
@@ -159,6 +185,21 @@ module_filepath
   
 --output-prefix OUTPUT_PREFIX
   * Filepath prefix to write output file. Extension will be dependent on the inclusion of --output-txt argument. By default the extension will be the same as the input object type. Default value is "output"
+
+
+###### specific to explain mode
+
+--explain-filepath EXPLAIN_FILEPATH
+  * Filepath to seurat .rds object or scanpy .h5ad anndata object containing cells to be explained. Expression data must be raw counts (i.e. unnormalized). Larger numbers of cells to explain will mean a longer run time. For reference, running ~100 cells with a background sample size of ~100 cells results in a runtime of approximately 15 minutes. Path to predicted cell type labels is specified by the --predicted-key
+
+--background-filepath BACKGROUND_FILEPATH
+  * Filepath to seurat .rds object or scanpy .h5ad anndata object containing cells to use for background samples in model explaination. Expression data must be raw counts (i.e. unnormalized). This object will be sampled to --background-sample-size cells. See --background-sample-size for more details.
+
+###### optional arguments specific to explain mode
+
+--predicted-key PREDICTED_KEY
+  * The key holding pollock predictiosn to use for explaining the given input data. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or the .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type
+
   
 #### example basic usage
 
@@ -213,13 +254,28 @@ An example of training a model on a scanpy .h5ad object that has cell type label
 pollock train from_scanpy --module-filepath <path_to_write_output_module> --scanpy-h5ad-filepath <filepath_to_h5ad_object> --cell-type-key my_special_cell_types
 ```
 
+##### explain mode
 
+Note: explain mode can have excessive runtimes for large numbers of cells, so we recommend downsampling the number of cells in the inputs to <1k cells for faster runtimes.
+
+The explain object contains cells to be explained, the background arguments contains cells to be sampled as background.
+
+An example of explaining a model for a Seurat .RDS object that has cell type labels in @active.idents slot. Note this is where cell type labels are typically stored in Seurat workflows.
+```bash
+pollock explain from_seurat --explain-filepath <path_to_explain_seurat_object> --background-filepath <path_to_background_seurat_object> --module-filepath <path_to_pollock_module> --output-prefix <path_to_write_output>
+```
+
+An example of explaining a model on a Scanpy .h5ad object that has cell type labels in column named 'cell_type' in .obs dataframe.
+```bash
+pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --background-filepath <path_to_background_h5ad> --module-filepath <path_to_pollock_module> --predicted-key cell_type --output-prefix <path_to_write_output>
+```
 
 ## docker
 Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.0.15
+docker pull estorrs/pollock-cpu:0.1,0
 ```
+
 
 #### example basic usage of comand line tool within a docker container
 

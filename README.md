@@ -276,7 +276,7 @@ pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --backgrou
 #### Docker
 Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.1,0
+docker pull estorrs/pollock-cpu:0.1.0
 ```
 
 ###### example basic usage of comand line tool within a docker container

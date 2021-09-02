@@ -31,8 +31,10 @@ git clone https://github.com/ding-lab/pollock.git
 Then, create a conda environment from the environmental file within the Pollock repository and activate the conda environment.
 
 ```bash
+cd pollock
 conda env create --file env.yaml
 conda activate pollock
+pip install .
 ```
 
 If you intend to run Pollock off .RDS Seurat single cell objects you will also need to install the rpollock R library with the following command. For additional information about running with R, see the Usage - R section below.
@@ -49,7 +51,7 @@ TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <
 
 ## Usage
 
-Pollock uses deep learning to make cell type predictions. At it's core, pollock is build upon a deep learning technique called a Beta Variational Autoencoder (BVAE).
+Pollock uses deep learning to make cell type predictions. At it's core, pollock is a variational autoencoder (VAE) paired with a random forest classifier.
 
 With pollock, there are a selection of cell type classification modules that have been trained on a variety of single cell RNA-seq datasets. Any of these modules can be used to classify your single cell data.
 
@@ -274,9 +276,9 @@ pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --backgrou
 ```
 
 #### Docker
-Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
+Docker images are available for Pollock. To pull the latest Pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.1.0
+docker pull estorrs/pollock-cpu:0.1.2
 ```
 
 ###### example basic usage of comand line tool within a docker container
@@ -285,9 +287,8 @@ When using docker, the input and ouput file directories need to be mounted as a 
 
 Below is an example of predicting cell types from within a docker container. Sections outlined by <> need to be replaced. Note file and directory paths in the -v flag must be absolute. For more examples of how the pollock command line tool is used see the above usage examples.
 
-ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.1.0 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.1.2 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
 ```
 
 ### Testing

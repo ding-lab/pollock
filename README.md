@@ -16,11 +16,13 @@ In Development
 * Python3.6 or later
 
 * Anaconda/Conda
-  * Working installation of conda is required
+  * Working installation of conda is required if not using Docker
 
 #### To install
 
-pollock is available through the conda package manager as an environmental file
+Pollock is available to run in a Docker image (see below) or can be installed with Conda.
+
+If running without Docker, follow the installation instructions below.
 
 First, download the Pollock repo
 

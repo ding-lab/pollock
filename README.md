@@ -1,6 +1,6 @@
 # Pollock
 
-![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/polluck.png)
+![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/pollock.png)
 
 Pollock is a tool for single cell classification. Pollock is available in both Python, R, and as a command line tool
 
@@ -12,11 +12,9 @@ In Development
   * macOS 10.12.6 (Sierra) or later
   * Ubuntu 16.04 or later
   * Windows 7 or later (not tested)
-  
-* Python3.6 or later
 
 * Anaconda/Conda
-  * Working installation of conda is required if not using Docker
+  * Working installation of conda is required. Note this is not required if using Docker.
 
 #### To install
 

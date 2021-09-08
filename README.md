@@ -88,7 +88,7 @@ You can also create new modules with pollock (see training section below)
 
 ### Tutorials
 
-#### Python
+#### Python API
 
 [module training tutorial on pbmc dataset](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_model_training.ipynb)
 
@@ -96,7 +96,7 @@ You can also create new modules with pollock (see training section below)
 
 [module examination](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb)
 
-#### R
+#### R API
 
 There is an R library rpollock that comes installed with pollock that allows you to train a module and make predictions directly from R.
 

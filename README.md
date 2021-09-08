@@ -4,8 +4,6 @@
 
 Pollock is a tool for single cell classification. Pollock is available in both Python, R, and as a command line tool
 
-In Development
-
 ## Installation
 #### Requirements
 * OS:

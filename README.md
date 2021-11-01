@@ -57,7 +57,7 @@ Additionally, if you have annotated single cell data, pollock can also be used t
 
 ### Modules
 
-There are a variety of modules available for cell type classification. The modules and training datasets can be found on Zenodo at https://zenodo.org/record/5155939#.YQqxbxNKi-Y
+There are a variety of modules available for cell type classification. The modules and training datasets can be found on Zenodo at https://zenodo.org/record/5514140#.YYACrNZKhhE
 
 The following is a list of available pretrained modules:
   * scRNA-seq

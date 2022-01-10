@@ -24,3 +24,5 @@ dist/
 results/
 models/
 figures/
+notebooks/
+benchmarking/*.ipynb

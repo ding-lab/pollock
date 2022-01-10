@@ -40,6 +40,11 @@ parser.add_argument('--scanpy-h5ad-filepath', type=str,
         help='A saved .h5ad file to use for classification. scanpy \
 data matrix must be raw expression counts (i.e. not normalized)')
 
+
+########################
+## optional arguments ##
+########################
+
 ## optional arguments for prediction mode
 ## 10x specific parameters
 parser.add_argument('--counts-10x-filepath', type=str,
@@ -64,18 +69,11 @@ Default value is "output"')
 parser.add_argument('--explain-filepath', type=str,
         help='Filepath to seurat .rds object or scanpy .h5ad anndata object containing \
 cells to be explained. Expression data must be raw counts (i.e. unnormalized). Larger \
-numbers of cells to explain will mean a longer run time. For reference, running \
-~100 cells with a background sample size of ~100 cells results in a runtime of approximately \
-15 minutes. Path to predicted cell type labels is specified by the --predicted-key argument.')
-
-parser.add_argument('--background-filepath', type=str,
-        help='Filepath to seurat .rds object or scanpy .h5ad anndata object containing \
-cells to use for background samples in model explaination. Expression data must be \
-raw counts (i.e. unnormalized). This object will be sampled to --background-sample-size \
-cells. See --background-sample-size for more details.')
+numbers of cells to explain will mean a longer run time. \
+Path to predicted cell type labels is specified by the --predicted-key argument.')
 
 # optional arguments for explain mode
-parser.add_argument('--predicted-key', type=str, default='',
+parser.add_argument('--predicted-key', type=str, default='predicted_cell_type',
         help='The key holding pollock predictiosn to use for explaining the given input data. \
 The key can be one of the following: 1) A string representing a column in \
 the metadata of the input seurat object or the .obs attribute of the scanpy anndata object, \
@@ -86,17 +84,13 @@ input is a Seurat object pollock will use cell type labels in @active.ident, or 
 if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
 
 parser.add_argument('--background-sample-size', type=int, default=100,
-    help='Number of cells to sample as background samples from object at --background-filepath \
+    help='Number of cells to sample as background samples. \
 The default of 100 cells is sufficient in most use cases. A larger sample size results in longer \
 run times, but increased accuracy.')
 
-
-########################
-## optional arguments ##
-########################
-
 ## optional arguments for training mode
-parser.add_argument('--cell-type-key', type=str, default='',
+
+parser.add_argument('--cell-type-key', type=str, default='cell_type',
         help='The key to use for training the pollock module. \
 The key can be one of the following: 1) A string representing a column in \
 the metadata of the input seurat object or .obs attribute of the scanpy anndata object, \
@@ -105,32 +99,46 @@ must be equal to the number of cells in the input object. The cell types must \
 also be in the same order as the cells in the input object. By default if the \
 input is a Seurat object pollock will use cell type labels in @active.ident, or \
 if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
-parser.add_argument('--alpha', type=float, default=.0001,
-        help='This parameter controls how regularized the BVAE is. .0001 is the default. \
-If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. \
-If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable')
+
+parser.add_argument('--batch-size', type=int, default=64,
+        help='Batch size used for training.')
+parser.add_argument('--lr', type=float, default=1e-4,
+        help='Max learning rate.')
+parser.add_argument('--use-cuda', action='store_true',
+        help='If present, gpu will be used for training or prediction.')
+parser.add_argument('--kl-scaler', type=float, default=1e-3,
+        help='This parameter controls how regularized the VAE is. 1e-3 is the default. \
+If increased the cell embeddings are typically more noisy, but typically more generalizable. \
+If decreased the cell embeddings are typically less noisy, but typically less generalizable')
+parser.add_argument('--zinb-scaler', type=float, default=.5,
+        help='Controls how much weight to give VAE reconstruction loss.')
+parser.add_argument('--clf-scaler', type=float, default=1.,
+        help='Controls how much weight to give classification loss.')
 parser.add_argument('--epochs', type=int, default=20,
         help='Number of epochs to train the neural net for. Default is 20.')
-parser.add_argument('--latent-dim', type=int, default=25,
-        help='Size of hidden layer in the B-VAE. Default is 25.')
+parser.add_argument('--latent-dim', type=int, default=64,
+        help='Size of hidden layer in the VAE. Default is 64.')
+parser.add_argument('--enc-out-dim', type=int, default=128,
+        help='Size of layer before latent. Default is 128.')
+parser.add_argument('--middle-dim', type=int, default=512,
+        help='Size of intermediate linear layers. Default is 512.')
+parser.add_argument('--use-all-cells', action='store_true',
+        help='Use all inputs for training. Will override --val-ids and --n-per-cell-type')
+parser.add_argument('--val-ids', type=str,
+        help='If present, argument will override --n-per-cell-type. Specifies which cell ids should be used as validation, the remaining cell ids will be used for training. The filepath must be a text file with one cell ID per line.')
 parser.add_argument('--n-per-cell-type', type=int, default=500,
-        help='The number of cells per cell type that should be included in the training dataset. \
-Typically this number will be somewhere between 500-2000. The default is 500. \
-If you have a particular cell type in your dataset that has a low cell count it is usually a \
-good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type \
-should be no greater than the minimum cell type count * 10.')
-
+        help='Determines how to split input data into validation and training datasets. The input data will be split into training and validation datasets based on the following methadology. Typically this number will be somewhere between 500-2000. Default is 500. If you have a particular cell type in your dataset that has a low cell count it is usually a good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type should be no greater than the minimum cell type count * 10.')
 
 
 args = parser.parse_args()
 
-## point to location of rpollock scripts
-EXPLAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-                'wrappers', 'explain_rds.R')
-PREDICT_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-                'wrappers', 'predict_rds.R')
-TRAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-                'wrappers', 'train_rds.R')
+## ## point to location of rpollock scripts
+## EXPLAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##                 'wrappers', 'explain_rds.R')
+## PREDICT_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##                 'wrappers', 'predict_rds.R')
+## TRAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
+##                 'wrappers', 'train_rds.R')
 
 def load_10x():
     """Load 10x data from folder and return anndata obj"""
@@ -207,57 +215,66 @@ def check_arguments():
 --counts-10x-filelpath must be defined')
 
 
-def get_probability_df(labels, label_probs, probs, pds):
+def get_probability_df(adata, model):
     """Return dataframe with labels and probabliities"""
     df = pd.DataFrame.from_dict({
-        'cell_id': list(pds.prediction_adata.obs.index),
-        'predicted_cell_type': labels,
-        'predicted_cell_type_probability': label_probs})
+        'cell_id': adata.obs.index.to_list(),
+        'predicted_cell_type': adata.obs['predicted_cell_type'],
+        'predicted_cell_type_probability': adata.obs['prediction_prob']})
     df = df.set_index('cell_id')
 
     ## add cell probabilities
-    prob_df = pd.DataFrame(data=probs)
-    prob_df.index = list(pds.prediction_adata.obs.index)
-    prob_df.columns = [f'probability_{c}' for c in pds.cell_type_encoder.categories_[0]]
-    prob_df.columns = [c.replace(' ', '_') for c in prob_df.columns]
+    prob_df = pd.DataFrame(data=adata.obsm['prediction_probs'],
+                           columns=model.classes, index=adata.obs.index.to_list())
+    prob_df.columns = [f'probability {c}' for c in prob_df.columns]
 
     return pd.concat((df, prob_df), axis=1)
 
+## 
+## def run_predict_rds_script(rds_fp, module_dir, output_fp, output_type):
+##     logging.info('running predict rds script')
+##     subprocess.check_output(('Rscript', PREDICT_RDS_SCRIPT,
+##             rds_fp, module_dir, output_fp, output_type))
+##     logging.info('finish predict rds script')
+## 
 
 def run_explain_scanpy(explain_fp, background_fp, module_dir, output_fp,
-        predicted_key, background_sample_size):
+        label_key, use_cuda=False):
     explain_adata, background_adata = sc.read_h5ad(explain_fp), sc.read_h5ad(background_fp)
     logging.info('starting prediction explaination')
-    df = explain_predictions(explain_adata, background_adata, module_dir,
-            prediction_key=predicted_key, n_background_cells=background_sample_size)
+    model = load_model(module_dir)
+    df = explain_predictions(model, explain_adata, background_adata,
+            label_key=label_key, device='cuda' if use_cuda else 'cpu')
     logging.info('finished explaining')
     df.index.name = 'cell_id'
-    logging.info(f'writting feature weights to {output_fp}')
+    logging.info(f'writing feature weights to {output_fp}')
     df.to_csv(output_fp, sep='\t', index=True, header=True)
-
-def run_explain_rds_script(explain_fp, background_fp, module_dir, output_fp,
-        predicted_key, background_sample_size):
-    logging.info('running explain seurat rds')
-    subprocess.check_output(('Rscript', EXPLAIN_RDS_SCRIPT,
-            explain_fp, background_fp, module_dir, output_fp, predicted_key,
-            str(background_sample_size)))
-    logging.info('finish explain seurat rds')
-
-
-def run_predict_rds_script(rds_fp, module_dir, output_fp, output_type):
-    logging.info('running predict rds script')
-    subprocess.check_output(('Rscript', PREDICT_RDS_SCRIPT,
-            rds_fp, module_dir, output_fp, output_type))
-    logging.info('finish predict rds script')
+## 
+## 
+## def run_explain_rds_script(explain_fp, background_fp, module_dir, output_fp,
+##         predicted_key, background_sample_size):
+##     logging.info('running explain seurat rds')
+##     subprocess.check_output(('Rscript', EXPLAIN_RDS_SCRIPT,
+##             explain_fp, background_fp, module_dir, output_fp, label_key))
+##     logging.info('finish explain seurat rds')
 
 
-def run_train_rds_script(rds_fp, cell_key, module_dir,
-        alpha=.0001, latent_dim=25, n_per_cell_type=500, epochs=20):
-    logging.info('running train rds script')
-    subprocess.check_output(('Rscript', TRAIN_RDS_SCRIPT,
-            rds_fp, module_dir, cell_key,
-            str(alpha), str(epochs), str(latent_dim), str(n_per_cell_type)))
-    logging.info('finish train rds script')
+def run_train(args):
+    pass
+
+
+## def run_train_rds_script(args):
+##     logging.info('running train rds script')
+##     subprocess.check_output(('Rscript', TRAIN_RDS_SCRIPT,
+##             args.lr, args.epochs, args.batch_size, args.latent_dim,
+##             args.enc_out_dim, args.middle_dim, args.kl_scaler,
+##             args.clf_scaler, args.zinb_scaler, args.use_cuda,
+##             args.cell_type_key, args.module_filepath, args.n_per_cell_type))
+##     logging.info('finish train rds script')
+
+
+def main():
+    pass
 
 
 def main():
@@ -332,7 +349,7 @@ def main():
             else:
                 raise RuntimeError(f'Unable to find cell type key {args.cell_type_key} in anndata, or \
     find load labels from filepath {args.cell_type_key}, or find leiden in .obs')
-    
+
             pds = PollockDataset(adata, cell_type_key=key, n_per_cell_type=args.n_per_cell_type,
                     dataset_type='training')
             pm = PollockModel(pds.cell_types, pds.train_adata.shape[1], alpha=args.alpha,
@@ -340,7 +357,7 @@ def main():
             pm.fit(pds, epochs=args.epochs, max_metric_batches=2, metric_epoch_interval=1,
                     metric_n_per_cell_type=50)
             pm.save(pds, args.module_filepath)
-    
+
             logging.info('finish module training')
             logging.info(f'saved module at {args.module_filepath}')
     

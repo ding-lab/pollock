@@ -3,9 +3,6 @@ import subprocess
 import shutil
 
 import pandas as pd
-import pytest
-
-from pollock.models.model import PollockDataset, PollockModel, predict_from_anndata
 
 MODULE_FILEPATH = './test_module'
 SEURAT_RDS_FILEPATH = './data/dummy.rds'

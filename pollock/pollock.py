@@ -1,16 +1,12 @@
 import argparse
 import logging
-import os
-import pathlib
-import subprocess
 
+import numpy as np
 import pandas as pd
 import scanpy as sc
 
-import pollock
-from pollock.models.model import PollockDataset, PollockModel, predict_from_anndata
-from pollock.models.explain import explain_predictions
-from pollock.preprocessing.preprocessing import read_rds
+import pollock.utils as utils
+import pollock.explain as explain
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
@@ -56,6 +52,11 @@ parser.add_argument('--min-genes-per-cell', type=int, default=10,
         help='The minimun number of genes expressed in a cell in order for it \
 to be classified. Only used in 10x mode. Default value is 10.')
 
+# other
+parser.add_argument('--no-umap', action='store_false',
+        help='By default VAE embeddings are transformed via UMAP into 2D space \
+and incorporated into predicted object. However, this step can take additional time. \
+To prevent include the --no-umap flag. This will speed up prediction time.')
 parser.add_argument('--txt-output', action='store_true',
         help='If included output will be written to a tab-seperated .txt file. \
 Otherwise output will be saved in the metadata of the input seurat object (.rds) or \
@@ -65,7 +66,7 @@ parser.add_argument('--output-prefix', type=str, default='output',
 of --output-txt argument. By default the extension will be the same as the input object type. \
 Default value is "output"')
 
-## required arguments for explain mode
+# required arguments for explain mode
 parser.add_argument('--explain-filepath', type=str,
         help='Filepath to seurat .rds object or scanpy .h5ad anndata object containing \
 cells to be explained. Expression data must be raw counts (i.e. unnormalized). Larger \
@@ -73,22 +74,12 @@ numbers of cells to explain will mean a longer run time. \
 Path to predicted cell type labels is specified by the --predicted-key argument.')
 
 # optional arguments for explain mode
-parser.add_argument('--predicted-key', type=str, default='predicted_cell_type',
-        help='The key holding pollock predictiosn to use for explaining the given input data. \
-The key can be one of the following: 1) A string representing a column in \
-the metadata of the input seurat object or the .obs attribute of the scanpy anndata object, \
-or 2) filepath to a .txt file where each line is a cell type prediction. The number of lines \
-must be equal to the number of cells in the input object. The cell types must \
-also be in the same order as the cells in the input object. By default if the \
-input is a Seurat object pollock will use cell type labels in @active.ident, or \
-if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
-
 parser.add_argument('--background-sample-size', type=int, default=100,
     help='Number of cells to sample as background samples. \
 The default of 100 cells is sufficient in most use cases. A larger sample size results in longer \
 run times, but increased accuracy.')
 
-## optional arguments for training mode
+# optional arguments for training mode
 
 parser.add_argument('--cell-type-key', type=str, default='cell_type',
         help='The key to use for training the pollock module. \
@@ -132,13 +123,6 @@ parser.add_argument('--n-per-cell-type', type=int, default=500,
 
 args = parser.parse_args()
 
-## ## point to location of rpollock scripts
-## EXPLAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-##                 'wrappers', 'explain_rds.R')
-## PREDICT_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-##                 'wrappers', 'predict_rds.R')
-## TRAIN_RDS_SCRIPT = os.path.join(pathlib.Path(__file__).parent.absolute(),
-##                 'wrappers', 'train_rds.R')
 
 def load_10x():
     """Load 10x data from folder and return anndata obj"""
@@ -159,7 +143,7 @@ def load_10x():
 def load_seurat():
     """Load seurat RDS and convert to scanpy"""
     logging.info('loading seurat rds')
-    adata = read_rds(args.seurat_rds_filepath)
+    adata = utils.convert_rds(args.seurat_rds_filepath)
 
     return adata
 
@@ -220,7 +204,7 @@ def get_probability_df(adata, model):
     df = pd.DataFrame.from_dict({
         'cell_id': adata.obs.index.to_list(),
         'predicted_cell_type': adata.obs['predicted_cell_type'],
-        'predicted_cell_type_probability': adata.obs['prediction_prob']})
+        'predicted_cell_type_probability': adata.obs['predicted_cell_type_probability']})
     df = df.set_index('cell_id')
 
     ## add cell probabilities
@@ -228,144 +212,98 @@ def get_probability_df(adata, model):
                            columns=model.classes, index=adata.obs.index.to_list())
     prob_df.columns = [f'probability {c}' for c in prob_df.columns]
 
-    return pd.concat((df, prob_df), axis=1)
+    df = pd.concat((df, prob_df), axis=1)
 
-## 
-## def run_predict_rds_script(rds_fp, module_dir, output_fp, output_type):
-##     logging.info('running predict rds script')
-##     subprocess.check_output(('Rscript', PREDICT_RDS_SCRIPT,
-##             rds_fp, module_dir, output_fp, output_type))
-##     logging.info('finish predict rds script')
-## 
+    # add umap if present
+    if 'X_umap' in adata.obsm:
+        df['UMAP1'] = adata.obsm[:, 0].flatten()
+        df['UMAP2'] = adata.obsm[:, 1].flatten()
 
-def run_explain_scanpy(explain_fp, background_fp, module_dir, output_fp,
-        label_key, use_cuda=False):
-    explain_adata, background_adata = sc.read_h5ad(explain_fp), sc.read_h5ad(background_fp)
-    logging.info('starting prediction explaination')
-    model = load_model(module_dir)
-    df = explain_predictions(model, explain_adata, background_adata,
-            label_key=label_key, device='cuda' if use_cuda else 'cpu')
+    return df
+
+
+def run_predict_cell_types(adata):
+    logging.info('predicting cell types')
+    model = utils.load_model(args.module_filepath)
+    if args.use_cuda:
+        model = model.cuda()
+
+    a = utils.predict_adata(model, adata, make_umap=not args.no_umap)
+    logging.info('cell types predicted')
+
+    if args.source_type == 'from_seurat':
+        utils.save_rds(a, args.output_prefix + '.rds')
+    elif args.source_type == 'from_scanpy':
+        a.write_h5ad(args.output_prefix + '.h5ad')
+    else:
+        df = get_probability_df(a, model)
+        df.to_csv(df, sep='\t')
+
+
+def run_create_module(adata, n_val=5000):
+    logging.info(f'creating training and validation objects')
+    if args.use_all_cells:
+        logging.info('using all cells')
+        val_ids = np.random.choice(
+            adata.var.index.to_list(), size=min(n_val, adata.shape[0]), replace=False)
+        train, val = adata, adata[val_ids]
+    elif args.val_ids is not None:
+        logging.info(f'using validation ids at {args.val_ids}')
+        val_ids = pd.read_csv(args.val_ids, header=None)[0].to_list()
+        pool = set(val_ids)
+        train_ids = [i for i in val_ids if i not in pool]
+        train, val = adata[train_ids], adata[val_ids]
+    else:
+        logging.info('creating train/val splits')
+        train_ids, rest = utils.get_splits(
+            adata, args.cell_type_key, args.n_per_cell_type, oversample=True)
+        val_ids, _ = utils.get_splits(
+            adata[rest], args.cell_type_key, args.n_per_cell_type, oversample=True)
+        train, val = adata[train_ids], adata[val_ids]
+
+    logging.info(f'train dataset size: {train.shape}, val dataset size: {val.shape}')
+
+    logging.info('creating module')
+    utils.train_and_save_model(train, val, args)
+    logging.info('module created')
+
+
+def run_explain(adata):
+    background_idxs = np.random.choice(
+        adata.obs.index.to_list(),
+        size=min(args.background_sample_size, adata.shape[0]), replace=False)
+    explain_adata, background_adata = adata, adata[background_idxs]
+    logging.info('starting explaination')
+    model = utils.load_model(args.module_filepath)
+    df = explain.explain_predictions(model, explain_adata, background_adata,
+        label_key=args.predicted_key, device='cuda' if args.use_cuda else 'cpu')
     logging.info('finished explaining')
     df.index.name = 'cell_id'
+
+    output_fp = args.output_prefix + '.txt'
     logging.info(f'writing feature weights to {output_fp}')
     df.to_csv(output_fp, sep='\t', index=True, header=True)
-## 
-## 
-## def run_explain_rds_script(explain_fp, background_fp, module_dir, output_fp,
-##         predicted_key, background_sample_size):
-##     logging.info('running explain seurat rds')
-##     subprocess.check_output(('Rscript', EXPLAIN_RDS_SCRIPT,
-##             explain_fp, background_fp, module_dir, output_fp, label_key))
-##     logging.info('finish explain seurat rds')
-
-
-def run_train(args):
-    pass
-
-
-## def run_train_rds_script(args):
-##     logging.info('running train rds script')
-##     subprocess.check_output(('Rscript', TRAIN_RDS_SCRIPT,
-##             args.lr, args.epochs, args.batch_size, args.latent_dim,
-##             args.enc_out_dim, args.middle_dim, args.kl_scaler,
-##             args.clf_scaler, args.zinb_scaler, args.use_cuda,
-##             args.cell_type_key, args.module_filepath, args.n_per_cell_type))
-##     logging.info('finish train rds script')
 
 
 def main():
-    pass
-
-
-def main():
-    if args.mode == 'explain':
-        check_explain_arguments()
-        if args.source_type == 'from_seurat':
-            run_explain_rds_script(args.explain_filepath, args.background_filepath,
-                    args.module_filepath, f'{args.output_prefix}.txt', args.predicted_key,
-                    args.background_sample_size)
-        elif args.source_type == 'from_scanpy':
-            run_explain_scanpy(args.explain_filepath, args.background_filepath,
-                    args.module_filepath, f'{args.output_prefix}.txt', args.predicted_key,
-                    args.background_sample_size)
-        else:
-            raise RuntimeError('not a valid source type: {args.source_type}')
-    elif args.mode == 'predict':
-        check_arguments()
-        ## run from rds script if seruat input
-        if args.source_type == 'from_seurat':
-            extension = 'txt' if args.txt_output else 'rds'
-            run_predict_rds_script(args.seurat_rds_filepath, args.module_filepath, 
-                    f'{args.output_prefix}.{extension}', extension)
-        else:
-            if args.source_type == 'from_10x':
-                adata = load_10x()
-            elif args.source_type == 'from_scanpy':
-                adata = load_scanpy()
-            elif args.source_type == 'from_seurat':
-                pass
-            else:
-                raise RuntimeError(f'{args.source_type} is not a valid source_type')
-
-            logging.info('processing in counts and loading classification module')
-            print(f'loading model from {args.module_filepath}')
-            df = predict_from_anndata(adata, args.module_filepath)
-        
-            if args.txt_output:
-                output_fp = f'{args.output_prefix}.txt'
-                logging.info(f'writing txt output to {output_fp}')
-                df.to_csv(output_fp, sep='\t', index=True, header=True)
-            else:
-                output_fp = f'{args.output_prefix}.h5ad'
-                logging.info(f'writing scanpy anndata in .h5ad format to {output_fp}')
-                adata.obs = pd.concat((adata.obs, df), axis=1)
-                adata.obs.index.name = 'cell_id'
-                adata.write_h5ad(output_fp)
-    elif args.mode == 'train':
-        check_arguments()
-        ## run from rds script if seruat input
-        if args.source_type == 'from_seurat':
-            run_train_rds_script(args.seurat_rds_filepath, args.cell_type_key, args.module_filepath,
-                    alpha=args.alpha, latent_dim=args.latent_dim, epochs=args.epochs,
-                    n_per_cell_type=args.n_per_cell_type)
-            logging.info(f'saved module at {args.module_filepath}')
-        elif args.source_type == 'from_scanpy':
-            adata = load_scanpy()
-            logging.info('training pollock module')
-            if args.cell_type_key in adata.obs:
-                key = args.cell_type_key
-            elif os.path.exists(args.cell_type_key):
-                logging.info(f'{args.cell_type_key} not found in anndata object. Attempting \
-    to load from file.')
-                key = 'pollock_training_labels'
-                labels = pd.read_csv(args.cell_type_key, header=None, sep='\t')
-                labels.columns = ['label']
-                if labels.shape[0] != adata.shape[0]:
-                    raise RuntimeError(f'Length of cell type labels and anndata object to not match. \
-    label length: {len(labels)}, shape of anndata object: {adata.shape}')
-                adata.obs[key] = labels['label'].to_list()
-            elif 'leiden' in adata.obs:
-                key = 'leiden'
-            else:
-                raise RuntimeError(f'Unable to find cell type key {args.cell_type_key} in anndata, or \
-    find load labels from filepath {args.cell_type_key}, or find leiden in .obs')
-
-            pds = PollockDataset(adata, cell_type_key=key, n_per_cell_type=args.n_per_cell_type,
-                    dataset_type='training')
-            pm = PollockModel(pds.cell_types, pds.train_adata.shape[1], alpha=args.alpha,
-                    latent_dim=args.latent_dim)
-            pm.fit(pds, epochs=args.epochs, max_metric_batches=2, metric_epoch_interval=1,
-                    metric_n_per_cell_type=50)
-            pm.save(pds, args.module_filepath)
-
-            logging.info('finish module training')
-            logging.info(f'saved module at {args.module_filepath}')
-    
-        else:
-            raise RuntimeError(f'{args.source_type} is not a valid source_type for train mode')
+    if args.source_type == 'from_seurat':
+        adata = load_seurat()
+    elif args.source_type == 'from_scanpy':
+        adata = load_scanpy()
+    elif args.source_type == 'from_10x':
+        adata = load_10x()
     else:
-        raise RuntimeError(f'Invalid pollock mode of {args.mode}. \
-pollock mode must either train, predict, or explain')
+        raise RuntimeError(f'{args.source_type} is not a valid source type. must be from_seurat, from_scanpy, or from_10x')
+
+    if args.mode == 'predict':
+        run_predict_cell_types(adata)
+    elif args.mode == 'explain':
+        run_explain(adata)
+    elif args.mode == 'train':
+        run_create_module(adata)
+    else:
+        raise RuntimeError(f'{args.mode} is not a valid mode. must be either predict, explain, or train')
+
 
 if __name__ == '__main__':
     main()

@@ -53,7 +53,7 @@ parser.add_argument('--min-genes-per-cell', type=int, default=10,
 to be classified. Only used in 10x mode. Default value is 10.')
 
 # other
-parser.add_argument('--no-umap', action='store_false',
+parser.add_argument('--no-umap', action='store_true',
         help='By default VAE embeddings are transformed via UMAP into 2D space \
 and incorporated into predicted object. However, this step can take additional time. \
 To prevent include the --no-umap flag. This will speed up prediction time.')
@@ -66,12 +66,6 @@ parser.add_argument('--output-prefix', type=str, default='output',
 of --output-txt argument. By default the extension will be the same as the input object type. \
 Default value is "output"')
 
-# required arguments for explain mode
-parser.add_argument('--explain-filepath', type=str,
-        help='Filepath to seurat .rds object or scanpy .h5ad anndata object containing \
-cells to be explained. Expression data must be raw counts (i.e. unnormalized). Larger \
-numbers of cells to explain will mean a longer run time. \
-Path to predicted cell type labels is specified by the --predicted-key argument.')
 
 # optional arguments for explain mode
 parser.add_argument('--background-sample-size', type=int, default=100,
@@ -83,13 +77,8 @@ run times, but increased accuracy.')
 
 parser.add_argument('--cell-type-key', type=str, default='cell_type',
         help='The key to use for training the pollock module. \
-The key can be one of the following: 1) A string representing a column in \
-the metadata of the input seurat object or .obs attribute of the scanpy anndata object, \
-or 2) filepath to a .txt file where each line is a cell type label. The number of lines \
-must be equal to the number of cells in the input object. The cell types must \
-also be in the same order as the cells in the input object. By default if the \
-input is a Seurat object pollock will use cell type labels in @active.ident, or \
-if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].')
+The key must be a sring representing a column in \
+the metadata of the input seurat object or .obs attribute of the scanpy anndata object.')
 
 parser.add_argument('--batch-size', type=int, default=64,
         help='Batch size used for training.')
@@ -142,42 +131,19 @@ def load_10x():
 
 def load_seurat():
     """Load seurat RDS and convert to scanpy"""
-    logging.info('loading seurat rds')
+    logging.info(f'loading seurat rds at {args.seurat_rds_filepath}')
     adata = utils.convert_rds(args.seurat_rds_filepath)
+    adata.var_names_make_unique()
 
     return adata
 
 def load_scanpy():
     """Load scanpy h5ad"""
-    logging.info('loading scanpy h5ad')
+    logging.info(f'loading scanpy h5ad at {args.scanpy_h5ad_filepath}')
     adata = sc.read_h5ad(args.scanpy_h5ad_filepath)
+    adata.var_names_make_unique()
 
     return adata
-
-def check_explain_arguments():
-    """Check arguments for explain mode."""
-    available_types = ['from_seurat', 'from_scanpy']
-    if args.source_type not in available_types:
-        raise RuntimeError(f'source type: {args.source_type} is not a valid source type.\
- for explain mode. source type must be one of the following: {available_types}')
-
-    if args.explain_filepath is None:
-        raise RuntimeError('Must specify --explain-filepath for explain mode')
-    if args.background_filepath is None:
-        raise RuntimeError('Must specify --background-filepath for explain mode')
-
-    if args.source_type == 'from_seurat' and '.rds' not in args.explain_filepath.lower():
-        raise RuntimeError(f'.rds file extension must be used with {args.explain_filepath} \
-when source type is {args.source_type}')
-    if args.source_type == 'from_seurat' and '.rds' not in args.background_filepath.lower():
-        raise RuntimeError(f'.rds file extension must be used with {args.background_filepath} \
-when source type is {args.source_type}')
-    if args.source_type == 'from_scanpy' and '.h5ad' not in args.explain_filepath.lower():
-        raise RuntimeError(f'.h5ad file extension must be used with {args.explain_filepath} \
-when source type is {args.source_type}')
-    if args.source_type == 'from_scanpy' and '.h5ad' not in args.background_filepath.lower():
-        raise RuntimeError(f'.h5ad file extension must be used with {args.background_filepath} \
-when source type is {args.source_type}')
 
 
 def check_arguments():
@@ -216,8 +182,8 @@ def get_probability_df(adata, model):
 
     # add umap if present
     if 'X_umap' in adata.obsm:
-        df['UMAP1'] = adata.obsm[:, 0].flatten()
-        df['UMAP2'] = adata.obsm[:, 1].flatten()
+        df['UMAP1'] = adata.obsm['X_umap'][:, 0].flatten()
+        df['UMAP2'] = adata.obsm['X_umap'][:, 1].flatten()
 
     return df
 
@@ -228,16 +194,22 @@ def run_predict_cell_types(adata):
     if args.use_cuda:
         model = model.cuda()
 
+    logging.info(f'generate umap: {not args.no_umap}')
     a = utils.predict_adata(model, adata, make_umap=not args.no_umap)
     logging.info('cell types predicted')
 
-    if args.source_type == 'from_seurat':
+    if args.txt_output:
+        output_fp = args.output_prefix + '.txt'
+        df = get_probability_df(a, model)
+        df.to_csv(output_fp, sep='\t')
+    elif args.source_type == 'from_seurat':
         utils.save_rds(a, args.output_prefix + '.rds')
     elif args.source_type == 'from_scanpy':
         a.write_h5ad(args.output_prefix + '.h5ad')
     else:
+        output_fp = args.output_prefix + '.txt'
         df = get_probability_df(a, model)
-        df.to_csv(df, sep='\t')
+        df.to_csv(output_fp, sep='\t')
 
 
 def run_create_module(adata, n_val=5000):
@@ -260,6 +232,8 @@ def run_create_module(adata, n_val=5000):
         val_ids, _ = utils.get_splits(
             adata[rest], args.cell_type_key, args.n_per_cell_type, oversample=True)
         train, val = adata[train_ids], adata[val_ids]
+    train.obs_names_make_unique()
+    val.obs_names_make_unique()
 
     logging.info(f'train dataset size: {train.shape}, val dataset size: {val.shape}')
 
@@ -276,7 +250,7 @@ def run_explain(adata):
     logging.info('starting explaination')
     model = utils.load_model(args.module_filepath)
     df = explain.explain_predictions(model, explain_adata, background_adata,
-        label_key=args.predicted_key, device='cuda' if args.use_cuda else 'cpu')
+        label_key=args.cell_type_key, device='cuda' if args.use_cuda else 'cpu')
     logging.info('finished explaining')
     df.index.name = 'cell_id'
 
@@ -286,6 +260,7 @@ def run_explain(adata):
 
 
 def main():
+    check_arguments()
     if args.source_type == 'from_seurat':
         adata = load_seurat()
     elif args.source_type == 'from_scanpy':

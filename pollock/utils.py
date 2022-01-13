@@ -5,9 +5,11 @@ import os
 import re
 import subprocess
 import pathlib
+import uuid
 from collections import Counter
 from pathlib import Path
 
+import pandas as pd
 import numpy as np
 import torch
 import scanpy as sc
@@ -252,12 +254,19 @@ def predict_adata(model, adata, make_umap=True, umap_fit_n=10000, batch_size=102
     a.obs['predicted_cell_type_probability'] = [np.max(probs) for probs in y_prob]
     a.obs['predicted_cell_type'] = [model.classes[np.argmax(probs)]
                                     for probs in y_prob]
+
+    prob_df = pd.DataFrame(data=a.obsm['prediction_probs'],
+                           columns=model.classes, index=a.obs.index.to_list())
+    prob_df.columns = [f'probability {c}' for c in prob_df.columns]
+
+    a.obs = pd.concat((a.obs, prob_df), axis=1)
+
     return a
 
 
 def convert_rds(rds_fp):
-    h5_fp = rds_fp[:-3] + 'h5seurat'
-    h5ad_fp = rds_fp[:-3] + 'h5ad'
+    h5_fp = str(uuid.uuid4()) + '.h5seurat'
+    h5ad_fp = h5_fp.replace('.h5seurat', '.h5ad')
     subprocess.check_output(('Rscript', CONVERT_RDS_SCRIPT, rds_fp, h5_fp))
 
     adata = sc.read_h5ad(h5ad_fp)
@@ -269,8 +278,8 @@ def convert_rds(rds_fp):
 
 
 def save_rds(adata, rds_fp):
-    h5_fp = rds_fp[:-3] + 'h5seurat'
-    h5ad_fp = rds_fp[:-3] + 'h5ad'
+    h5ad_fp = str(uuid.uuid4()) + '.h5ad'
+    h5_fp = h5ad_fp.replace('.h5ad', '.h5seurat')
 
     adata.write_h5ad(h5ad_fp)
 

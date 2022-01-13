@@ -1,129 +1,17 @@
 import logging
-import json
-import joblib
-import os
 import random
 import time
 from collections import Counter
-from pathlib import Path
 
 import anndata
 import numpy as np
-import pandas as pd
-import scipy
 import scanpy as sc
-from sklearn.metrics import classification_report
-from sklearn.preprocessing import StandardScaler
-import umap
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
 
 
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
-
-
-def cap_list(ls, n=100, split=.8, oversample=True):
-    """Cap list at n.
-
-    If n is larger than list size * .8, oversample until you hit n.
-    """
-    cap = int(len(ls) * split)
-    if cap > n:
-        return random.sample(ls, n)
-
-    if oversample:
-        pool = random.sample(ls, cap) if cap else list(ls)
-        ## oversample to 
-        return random.choices(pool, k=n)
-
-    return random.sample(ls, cap)
-
-def balancedish_training_generator(adata, cell_type_key, n_per_cell_type,
-            oversample=True, split=.8):
-    """Split anndata object into training and validation objects.
-
-    When splitting, equal numbers of cell types will be used for training.
-    """
-    cell_type_to_idxs = {}
-    for cell_id, cell_type in zip(adata.obs.index, adata.obs[cell_type_key]):
-        if cell_type not in cell_type_to_idxs:
-            cell_type_to_idxs[cell_type] = [cell_id]
-        else:
-            cell_type_to_idxs[cell_type].append(cell_id)
-
-    cell_type_to_idxs = {k:cap_list(ls, n_per_cell_type, oversample=oversample,
-                            split=split)
-                         for k, ls in cell_type_to_idxs.items()}
-
-    train_ids = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
-    train_idxs = np.arange(adata.shape[0])[np.isin(np.asarray(adata.obs.index), train_ids)]
-    val_idxs = np.delete(np.arange(adata.shape[0]), train_idxs)
-
-    train_adata = adata[train_idxs, :]
-    val_adata = adata[val_idxs, :]
-
-    return train_adata, val_adata
-
-
-def balance_adata(adata, key):
-    """Oversample imbalanced classes so each group (specified by key)
-    has the same number of cells per group"""
-    n = Counter(adata.obs[key]).most_common()[0][1]
-    idxs = []
-    for k in sorted(set(adata.obs[key])):
-        filtered = adata[adata.obs[key]==k]
-        ids = filtered.obs.index.to_list()
-        if len(ids) >= n:
-            idxs += ids
-        else:
-            idxs += list(np.random.choice(ids, n, replace=True))
-    return adata[idxs]
-
-
-# adapted from scDCC
-def normalize(adata, filter_min_counts=True, size_factors=True,
-              normalize_input=True, logtrans_input=True, var_order=None):
-
-    if filter_min_counts:
-        sc.pp.filter_genes(adata, min_counts=1)
-        sc.pp.filter_cells(adata, min_counts=1)
-
-    # add/reorder vars if needed
-    if var_order is not None:
-        obs = adata.obs
-        a, b = set(var_order), set(adata.var.index.to_list())
-        overlap = list(a.intersection(b))
-        missing = list(a - set(overlap))
-
-        new = adata[:, overlap]
-        m = anndata.AnnData(X=np.zeros((adata.shape[0], len(missing))),
-                            obs=adata.obs)
-        m.var.index = missing
-        new = anndata.concat((new, m), axis=1)
-
-        adata = new[:, var_order]
-        adata.obs = obs
-
-    if size_factors or normalize_input or logtrans_input:
-        adata.raw = adata.copy()
-    else:
-        adata.raw = adata
-
-    if size_factors:
-        sc.pp.normalize_per_cell(adata)
-        adata.obs['size_factors'] = adata.obs.n_counts / np.median(adata.obs.n_counts)
-    else:
-        adata.obs['size_factors'] = 1.0
-
-    if logtrans_input:
-        sc.pp.log1p(adata)
-
-    if normalize_input:
-        sc.pp.scale(adata)
-
-    return adata
 
 
 class ZINBLoss(torch.nn.Module):

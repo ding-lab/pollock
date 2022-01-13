@@ -1,8 +1,11 @@
+import logging
 import numpy as np
 import pandas as pd
 
 import torch
 from captum.attr import DeepLiftShap
+
+from pollock.dataloaders import get_prediction_dataloader
 
 
 class AttributionWrapper(torch.nn.Module):
@@ -16,8 +19,18 @@ class AttributionWrapper(torch.nn.Module):
 
 
 def explain_adata(model, adata, baseline_adata, target, device='cpu'):
-    inputs = torch.tensor(adata.X)
-    baseline = torch.tensor(baseline_adata.X)
+    try:
+        a_dl = get_prediction_dataloader(adata, model.genes)
+        b_dl = get_prediction_dataloader(baseline_adata, model.genes)
+        a, ab = a_dl.dataset.adata, b_dl.dataset.adata
+    except ZeroDivisionError:
+        logging.info(f'explain for target {target} with size of {adata.shape} failed in normalization')
+        return None
+
+    X = a.X.toarray() if 'sparse' in str(type(a.X)).lower() else a.X
+    baseline_X = ab.X.toarray() if 'sparse' in str(type(ab.X)).lower() else ab.X
+    inputs = torch.tensor(X)
+    baseline = torch.tensor(baseline_X)
 
     inputs, baseline = inputs.to(device), baseline.to(device)
 
@@ -32,24 +45,23 @@ def explain_adata(model, adata, baseline_adata, target, device='cpu'):
         attrs, _ = dls.attribute(
             inputs, baseline, target=target, return_convergence_delta=True)
         return pd.DataFrame(data=attrs.detach().cpu().numpy(),
-                            columns=adata.var.index.to_list(),
-                            index=adata.obs.index.to_list())
+                            columns=model.genes,
+                            index=a.obs.index.to_list())
     else:
         attrs = {}
         for i in range(len(model.classes)):
-            a, _ = dls.attribute(
+            attr, _ = dls.attribute(
                 inputs, baseline, target=i, return_convergence_delta=True)
             attrs[model.classes[i]] = pd.DataFrame(
-                data=a.detach().cpu().numpy(),
-                columns=adata.var.index.to_list(),
-                index=adata.obs.index.to_list())
+                data=attr.detach().cpu().numpy(),
+                columns=model.genes,
+                index=a.obs.index.to_list())
         return attrs
 
 
 def explain_predictions(model, adata, adata_background, label_key='cell_type',
                         n_sample=None, device='cpu'):
     attbs = None
-
     labels = sorted(set(adata.obs[label_key]))
     for label in labels:
         f = adata[adata.obs[label_key]==label]
@@ -59,11 +71,12 @@ def explain_predictions(model, adata, adata_background, label_key='cell_type',
                       replace=False)]
 
         a = explain_adata(model, f, adata_background, target=label, device=device)
-        a[label_key] = label
+        if a is not None:
+            a[label_key] = label
 
-        if attbs is None:
-            attbs = a
-        else:
-            attbs = pd.concat((attbs, a), axis=0)
+            if attbs is None:
+                attbs = a
+            else:
+                attbs = pd.concat((attbs, a), axis=0)
 
     return attbs

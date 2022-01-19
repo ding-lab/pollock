@@ -237,6 +237,7 @@ def predict_dl(dl, model):
 
 def predict_adata(model, adata, make_umap=True, umap_fit_n=10000, batch_size=1024):
     dl = get_prediction_dataloader(adata, model.genes, batch_size=1024)
+    logging.info(f'starting prediction of {dl.dataset.adata.shape[0]} cells')
     emb, y_prob = predict_dl(dl, model)
     a = dl.dataset.adata
     a.obsm['X_emb'] = emb

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 import torch
-from captum.attr import DeepLiftShap
+from captum.attr import DeepLiftShap, IntegratedGradients
 
 from pollock.dataloaders import get_prediction_dataloader
 
@@ -18,7 +18,8 @@ class AttributionWrapper(torch.nn.Module):
         return result['y']
 
 
-def explain_adata(model, adata, baseline_adata, target, device='cpu'):
+def explain_adata(model, adata, baseline_adata, target, device='cpu',
+                  method='integrated'):
     try:
         a_dl = get_prediction_dataloader(adata, model.genes)
         b_dl = get_prediction_dataloader(baseline_adata, model.genes)
@@ -39,7 +40,11 @@ def explain_adata(model, adata, baseline_adata, target, device='cpu'):
     if not isinstance(target, int) and target != 'all':
         target = model.classes.index(target)
 
-    dls = DeepLiftShap(attr_model)
+    if method == 'deeplift':
+        dls = DeepLiftShap(attr_model)
+    elif method == 'integrated':
+        baseline = torch.mean(baseline, dim=0).unsqueeze(dim=0)
+        dls = IntegratedGradients(attr_model)
 
     if target != 'all':
         attrs, _ = dls.attribute(

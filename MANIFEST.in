@@ -1,6 +1,3 @@
-pollock/preprocessing/*.R
-rpollock/*
-rpollock/R/*
-pollock/wrappers/*
-tests/data/*
-tests/*
+global-include *.R
+recursive-include pollock/wrappers
+recursive-include tests/data

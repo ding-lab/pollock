@@ -11,4 +11,6 @@ RUN conda env create --file pollock/env.yaml
 
 ENV PATH="/miniconda/envs/pollock/bin:$PATH"
 
+RUN pip install /pollock
+
 CMD /bin/bash

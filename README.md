@@ -103,7 +103,7 @@ module_filepath
 ###### mode specific arguments
 
 --seurat-rds-filepath SEURAT_RDS_FILEPATH
-  * A saved Seurat RDS object to use as input. Raw RNA-seq (i.e. not normalized) counts **must** be stored in @assays$RNA@data.
+  * A saved Seurat RDS object to use as input. Raw RNA-seq (i.e. not normalized) counts must be stored in @assays$RNA@counts or @assays$RNA@counts. This is where counts are typically stored in seurat single cell workflows.
   
 --scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH
   * A saved .h5ad file to use as input. scanpy expression matrix (.X attribute in the anndata object) must be raw expression counts (i.e. not normalized)
@@ -253,7 +253,6 @@ When using docker, the input and ouput file directories need to be mounted as a 
 
 Below is an example of predicting cell types from within a docker container. Sections outlined by <> need to be replaced. Note file and directory paths in the -v flag must be absolute. For more examples of how the pollock command line tool is used see the above usage examples.
 
-Note that if predicting from Seurat RDS object raw, un-normalized counts must be stored in the RNA assay, i.e. the expression data in the object should **not** be normalized.
 
 ```bash
 docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock:0.2.1 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output

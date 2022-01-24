@@ -12,7 +12,7 @@ with open(path.join(here, 'README.md')) as f:
 setup(
     # $ pip install pollock
     name='dinglab-pollock',
-    version='0.0.15',
+    version='0.2.0',
     description='A tool for single cell classification and characterization.',
     long_description=long_description,
     long_description_content_type='text/markdown',

@@ -3,18 +3,16 @@ import subprocess
 import shutil
 
 import pandas as pd
-import pytest
-
-from pollock.models.model import PollockDataset, PollockModel, predict_from_anndata
 
 MODULE_FILEPATH = './test_module'
 SEURAT_RDS_FILEPATH = './data/dummy.rds'
 SEURAT_SMALL_RDS_FILEPATH = './data/dummy_small.rds'
 SCANPY_H5AD_FILEPATH = './data/dummy.h5ad'
 SCANPY_SMALL_H5AD_FILEPATH = './data/dummy_small.h5ad'
+N_PER_CELL_TYPE = '50'
 OUTPUT_PREFIX = './output'
 
-EXPECTED_LENGTH = 2700
+EXPECTED_LENGTH = 1000
 
 
 def clean_up_test_files():
@@ -26,19 +24,11 @@ def clean_up_test_files():
             os.remove(fp)
 
 
-def test_train_from_seurat_with_default_activeident():
-    command = ('pollock', 'train', 'from_seurat',
-            '--seurat-rds-filepath', SEURAT_RDS_FILEPATH,
-            '--module-filepath', MODULE_FILEPATH)
-    subprocess.check_output(command)
-
-    assert os.path.exists(MODULE_FILEPATH)
-
-
 def test_train_from_seurat_with_specified_cell_type():
     command = ('pollock', 'train', 'from_seurat',
             '--seurat-rds-filepath', SEURAT_RDS_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
+            '--n-per-cell-type', N_PER_CELL_TYPE,
             '--cell-type-key', 'cell_type')
     subprocess.check_output(command)
 
@@ -71,9 +61,9 @@ def test_predict_from_seurat_with_txt_output():
 
 def test_explain_from_seurat():
     command = ('pollock', 'explain', 'from_seurat',
-            '--explain-filepath', SEURAT_SMALL_RDS_FILEPATH,
-            '--background-filepath', SEURAT_SMALL_RDS_FILEPATH,
+            '--seurat-rds-filepath', SEURAT_SMALL_RDS_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
+            '--cell-type-key', 'cell_type',
             '--output-prefix', OUTPUT_PREFIX,
             '--background-sample-size', '10')
     subprocess.check_output(command)
@@ -82,23 +72,14 @@ def test_explain_from_seurat():
     assert os.path.exists(out_fp)
 
     df = pd.read_csv(out_fp, sep='\t')
-    assert df.shape[0] == 10
     assert df.shape[1] >= 1000
-
-
-def test_train_from_scanpy_with_default_leiden():
-    command = ('pollock', 'train', 'from_scanpy',
-            '--scanpy-h5ad-filepath', SCANPY_H5AD_FILEPATH,
-            '--module-filepath', MODULE_FILEPATH)
-    subprocess.check_output(command)
-
-    assert os.path.exists(MODULE_FILEPATH)
 
 
 def test_train_from_scanpy_with_specified_cell_type():
     command = ('pollock', 'train', 'from_scanpy',
             '--scanpy-h5ad-filepath', SCANPY_H5AD_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
+            '--n-per-cell-type', N_PER_CELL_TYPE,
             '--cell-type-key', 'cell_type')
     subprocess.check_output(command)
 
@@ -120,6 +101,7 @@ def test_predict_from_scanpy_with_txt_output():
     command = ('pollock', 'predict', 'from_scanpy',
             '--scanpy-h5ad-filepath', SCANPY_H5AD_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
+            '--cell-type-key', 'cell_type',
             '--output-prefix', OUTPUT_PREFIX,
             '--txt-output')
     subprocess.check_output(command)
@@ -130,11 +112,10 @@ def test_predict_from_scanpy_with_txt_output():
 
 def test_explain_from_scanpy():
     command = ('pollock', 'explain', 'from_scanpy',
-            '--explain-filepath', SCANPY_SMALL_H5AD_FILEPATH,
-            '--background-filepath', SCANPY_SMALL_H5AD_FILEPATH,
+            '--scanpy-h5ad-filepath', SCANPY_SMALL_H5AD_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
             '--output-prefix', OUTPUT_PREFIX,
-            '--predicted-key', 'cell_type',
+            '--cell-type-key', 'cell_type',
             '--background-sample-size', '10')
     subprocess.check_output(command)
 
@@ -142,7 +123,6 @@ def test_explain_from_scanpy():
     assert os.path.exists(out_fp)
 
     df = pd.read_csv(out_fp, sep='\t')
-    assert df.shape[0] == 10
     assert df.shape[1] >= 1000
 
 

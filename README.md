@@ -183,7 +183,7 @@ module_filepath
   * Number of cells to sample as background samples. The default of 100 cells is sufficient in most use cases.
 
 
-#### example basic usage
+### example basic usage
 
 ##### predict mode
 

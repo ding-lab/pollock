@@ -1,10 +1,8 @@
 # Pollock
 
-![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/polluck.png)
+![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/pollock.png)
 
 Pollock is a tool for single cell classification. Pollock is available in both Python, R, and as a command line tool
-
-In Development
 
 ## Installation
 #### Requirements
@@ -12,40 +10,46 @@ In Development
   * macOS 10.12.6 (Sierra) or later
   * Ubuntu 16.04 or later
   * Windows 7 or later (not tested)
-  
-* Python3.6 or later
 
 * Anaconda/Conda
-  * Working installation of conda and [bioconda](https://bioconda.github.io/). If you are new to conda and bioconda, we recommend following the getting started page [here](https://bioconda.github.io/user/install.html)
+  * Working installation of conda is required. Note this is not required if using Docker.
 
 #### To install
 
-pollock is available through the conda package manager.
+Pollock is available to run in a Docker image (see below) or can be installed with Conda.
 
-In addition to the default conda channels, pollock requires bioconda. In particular to ensure proper installation you must have your conda channels set up in the correct order by running the following:
-```bash
-conda config --add channels defaults
-conda config --add channels bioconda
-conda config --add channels conda-forge
-```
+If running without Docker, follow the installation instructions below.
 
-To install
+First, download the Pollock repo
 
 ```bash
-conda install -c epstorrs pollock==0.0.10
+git clone https://github.com/ding-lab/pollock.git
 ```
 
-NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error about tensorflow note being available you will have to install it manually using a directory with enough space (> 2GB should be sufficient).
+Then, create a conda environment from the environmental file within the Pollock repository and activate the conda environment.
+
+```bash
+cd pollock
+conda env create --file env.yaml
+conda activate pollock
+pip install .
+```
+
+If you intend to run Pollock off .RDS Seurat single cell objects you will also need to install the rpollock R library with the following command. For additional information about running with R, see the Usage - R section below.
+
+```bash
+R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
+```
+
+NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error that tensorflow is not available you will have to install it manually using a directory with enough space (> 2GB should be sufficient) with the following command.
 
 ```bash
 TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <path/to/directory> tensorflow==2.1.0
 ```
 
-After that pollock should work correctly
-
 ## Usage
 
-Pollock uses deep learning to make cell type predictions. At it's core, pollock is build upon a deep learning technique called a Beta Variational Autoencoder (BVAE).
+Pollock uses deep learning to make cell type predictions. At it's core, pollock is a variational autoencoder (VAE) paired with a random forest classifier.
 
 With pollock, there are a selection of cell type classification modules that have been trained on a variety of single cell RNA-seq datasets. Any of these modules can be used to classify your single cell data.
 
@@ -53,24 +57,46 @@ Additionally, if you have annotated single cell data, pollock can also be used t
 
 ### Modules
 
-There are a variety of modules available for cell type classification. They can be found on the dinglab cluster at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+There are a variety of modules available for cell type classification. The modules and training datasets can be found on Zenodo at https://zenodo.org/record/5514140#.YYACrNZKhhE
 
-To list available modules run
-```bash
-ls /diskmnt/Projects/Users/estorrs/pollock/modules
-```
+The following is a list of available pretrained modules:
+  * scRNA-seq
+    * disease_specific_brca_scRNAseq
+    * disease_specific_cesc_scRNAseq
+    * disease_specific_hnscc_scRNAseq
+    * disease_specific_melanoma_scRNAseq
+    * disease_specific_mmy_scRNAseq
+    * disease_specific_pdac_scRNAseq
+    * general_scRNAseq
+    * panimmune_scRNAseq
+    * HCA_bone_marrow_scRNAseq
+  * snRNAseq
+    * disease_specific_brca_snRNAseq
+    * disease_specific_gbm_snRNAseq
+    * disease_specific_ccrcc_snRNAseq
+    * general_snRNAseq
+  * snATACseq
+    * disease_specific_brca_snATACseq_gene_activity
+    * disease_specific_brca_snATACseq_motif
+    * disease_specific_ccrcc_snATACseq_gene_activity
+    * disease_specific_ccrcc_snATACseq_motif
+    * disease_specific_gbm_snATACseq_gene_activity
+    * disease_specific_gbm_snATACseq_motif
+    * general_snATACseq
 
-You can also create new modules with pollock (see below)
+You can also create new modules with pollock (see training section below)
 
-#### Python
+### Tutorials
+
+#### Python API
 
 [module training tutorial on pbmc dataset](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_model_training.ipynb)
 
-[prediction with an existing module](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_module_prediction.ipynb)
+[prediction and feature explaination with an existing module](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_module_prediction.ipynb)
 
 [module examination](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb)
 
-#### R
+#### R API
 
 There is an R library rpollock that comes installed with pollock that allows you to train a module and make predictions directly from R.
 
@@ -89,17 +115,21 @@ reticulate::use_python("<path/to/python/executable>")
 
 [This notebook](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb) is a python script walking over the information that is contained in each module. Though it is in python, all this information is saved in a json file so everything done in that notebook can also be done in R.
 
-## Command line tool
+#### Command line tool
 ```bash
 usage: pollock [-h] [--module-filepath MODULE_FILEPATH]
                [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
                [--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH]
-               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
-               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
-               [--n-per-cell-type N_PER_CELL_TYPE]
                [--counts-10x-filepath COUNTS_10X_FILEPATH]
                [--min-genes-per-cell MIN_GENES_PER_CELL] [--txt-output]
                [--output-prefix OUTPUT_PREFIX]
+               [--explain-filepath EXPLAIN_FILEPATH]
+               [--background-filepath BACKGROUND_FILEPATH]
+               [--predicted-key PREDICTED_KEY]
+               [--background-sample-size BACKGROUND_SAMPLE_SIZE]
+               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
+               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
+               [--n-per-cell-type N_PER_CELL_TYPE]
                mode source_type
 ```
 
@@ -109,14 +139,16 @@ mode
   * What task/mode is pollock to perform. Valid arguments are:
     * train
     * predict
+    * explain
 
 source_type
   * Input source type. Possible values are: from_seurat, from_10x, from_scanpy.
 
   
 module_filepath
-  * If in prediction mode, this is the filepath to module to use for classification. For beta, available modules are stored in katmai at `/diskmnt/Projects/Users/estorrs/pollock/modules`.
+  * If in prediction mode, this is the filepath to module to use for classification. Pretrained modules can be downloaded here https://zenodo.org/record/5155939#.YQqxbxNKi-Y
   * If in training mode, this is the filepath where pollock will save the trained module.
+  * If in explain mode, this is the filepath to the module to use to explain the given pollock predictions.
 
 ###### mode specific arguments
 
@@ -134,7 +166,7 @@ module_filepath
   * The key to use for training the pollock module. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type label. The number of lines must be equal to the number of cells in the input object. The cell types must also be in the same order as the cells in the input object. By default if the input is a Seurat object pollock will use cell type labels in @active.ident, or if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].
   
 --alpha ALPHA
-  * This parameter controls how regularized the BVAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+  * This parameter controls how regularized the VAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
 
 --epochs EPOCHS
   * Number of epochs to train the neural net for. Default is 20.
@@ -156,6 +188,21 @@ module_filepath
   
 --output-prefix OUTPUT_PREFIX
   * Filepath prefix to write output file. Extension will be dependent on the inclusion of --output-txt argument. By default the extension will be the same as the input object type. Default value is "output"
+
+
+###### specific to explain mode
+
+--explain-filepath EXPLAIN_FILEPATH
+  * Filepath to seurat .rds object or scanpy .h5ad anndata object containing cells to be explained. Expression data must be raw counts (i.e. unnormalized). Larger numbers of cells to explain will mean a longer run time. For reference, running ~100 cells with a background sample size of ~100 cells results in a runtime of approximately 15 minutes. Path to predicted cell type labels is specified by the --predicted-key
+
+--background-filepath BACKGROUND_FILEPATH
+  * Filepath to seurat .rds object or scanpy .h5ad anndata object containing cells to use for background samples in model explaination. Expression data must be raw counts (i.e. unnormalized). This object will be sampled to --background-sample-size cells. See --background-sample-size for more details.
+
+###### optional arguments specific to explain mode
+
+--predicted-key PREDICTED_KEY
+  * The key holding pollock predictiosn to use for explaining the given input data. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or the .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type
+
   
 #### example basic usage
 
@@ -210,21 +257,41 @@ An example of training a model on a scanpy .h5ad object that has cell type label
 pollock train from_scanpy --module-filepath <path_to_write_output_module> --scanpy-h5ad-filepath <filepath_to_h5ad_object> --cell-type-key my_special_cell_types
 ```
 
+##### explain mode
 
+Note: explain mode can have excessive runtimes for large numbers of cells, so we recommend downsampling the number of cells in the inputs to <1k cells for faster runtimes.
 
-## docker
-Dockerfiles for pollock can be found in the `docker/` directory. They can also be pulled from estorrs/pollock-cpu on dockerhub. To pull the latest pollock docker image run the following:
+The explain object contains cells to be explained, the background arguments contains cells to be sampled as background.
+
+An example of explaining a model for a Seurat .RDS object that has cell type labels in @active.idents slot. Note this is where cell type labels are typically stored in Seurat workflows.
 ```bash
-docker pull estorrs/pollock-cpu:0.0.10
+pollock explain from_seurat --explain-filepath <path_to_explain_seurat_object> --background-filepath <path_to_background_seurat_object> --module-filepath <path_to_pollock_module> --output-prefix <path_to_write_output>
 ```
 
-#### example basic usage of comand line tool within a docker container
+An example of explaining a model on a Scanpy .h5ad object that has cell type labels in column named 'cell_type' in .obs dataframe.
+```bash
+pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --background-filepath <path_to_background_h5ad> --module-filepath <path_to_pollock_module> --predicted-key cell_type --output-prefix <path_to_write_output>
+```
+
+#### Docker
+Docker images are available for Pollock. To pull the latest Pollock docker image run the following:
+```bash
+docker pull estorrs/pollock-cpu:0.1.2
+```
+
+###### example basic usage of comand line tool within a docker container
 
 When using docker, the input and ouput file directories need to be mounted as a volume using the docker -v argument.
 
 Below is an example of predicting cell types from within a docker container. Sections outlined by <> need to be replaced. Note file and directory paths in the -v flag must be absolute. For more examples of how the pollock command line tool is used see the above usage examples.
 
-ding lab only: the </path/to/modules/directory/> would be /diskmnt/Projects/Users/estorrs/pollock/modules on katmai
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.0.10 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.1.2 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+```
+
+### Testing
+
+To run Pollock tests navigate to the tests/ directory and run
+```bash
+pytest -vv test_pollock.py
 ```

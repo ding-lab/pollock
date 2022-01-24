@@ -2,17 +2,9 @@
 
 ![Image of Pollock](https://github.com/ding-lab/pollock/blob/master/images/pollock.png)
 
-Pollock is a tool for single cell classification. Pollock is available in both Python, R, and as a command line tool
+Pollock is a deep learning method for single cell classification.
 
 ## Installation
-#### Requirements
-* OS:
-  * macOS 10.12.6 (Sierra) or later
-  * Ubuntu 16.04 or later
-  * Windows 7 or later (not tested)
-
-* Anaconda/Conda
-  * Working installation of conda is required. Note this is not required if using Docker.
 
 #### To install
 
@@ -35,54 +27,38 @@ conda activate pollock
 pip install .
 ```
 
-If you intend to run Pollock off .RDS Seurat single cell objects you will also need to install the rpollock R library with the following command. For additional information about running with R, see the Usage - R section below.
-
-```bash
-R -e "Sys.setenv(TAR = system('which tar', intern = TRUE)); devtools::install_github('https://github.com/estorrs/rpollock')"
-```
-
-NOTE: tensorflow requires a fair amount of space to build correctly. In some clusters the tmp/ directory does not have enough space for tensorflow to build. If you run pollock and get an error that tensorflow is not available you will have to install it manually using a directory with enough space (> 2GB should be sufficient) with the following command.
-
-```bash
-TMPDIR=<path/to/directory> pip install --cache-dir=<path/to/directory> --build <path/to/directory> tensorflow==2.1.0
-```
-
 ## Usage
 
-Pollock uses deep learning to make cell type predictions. At it's core, pollock is a variational autoencoder (VAE) paired with a random forest classifier.
+Pollock uses deep learning to make cell type predictions. At it's core, pollock is a variational autoencoder (VAE) with a linear classification head.
 
-With pollock, there are a selection of cell type classification modules that have been trained on a variety of single cell RNA-seq datasets. Any of these modules can be used to classify your single cell data.
+With pollock, there are a selection of cell type classification models that have been trained on a variety of single cell RNA-seq datasets. Any of these modules can be used to classify your single cell data.
 
 Additionally, if you have annotated single cell data, pollock can also be used to train a new module based on the given cell types.
 
-### Modules
+### Pretrained Models
 
-There are a variety of modules available for cell type classification. The modules and training datasets can be found on Zenodo at https://zenodo.org/record/5514140#.YYACrNZKhhE
+There are a variety of modules available for cell type classification. The models and training datasets can be found on Zenodo at https://zenodo.org/record/5895221 in pretrained_models.tar.gz and benchmarking_datasets.tar.gz
 
 The following is a list of available pretrained modules:
   * scRNA-seq
-    * disease_specific_brca_scRNAseq
-    * disease_specific_cesc_scRNAseq
-    * disease_specific_hnscc_scRNAseq
-    * disease_specific_melanoma_scRNAseq
-    * disease_specific_mmy_scRNAseq
-    * disease_specific_pdac_scRNAseq
-    * general_scRNAseq
-    * panimmune_scRNAseq
-    * HCA_bone_marrow_scRNAseq
+    * scRNAseq_brca (trained with disease-specific breast cancer dataset)
+    * scRNAseq_cesc (trained with disease-specific cervical cancer dataset)
+    * scRNAseq_hnscc (trained with disease-specific head and neck cancer dataset)
+    * scRNAseq_melanoma (trained with disease-specific melanoma dataset)
+    * scRNAseq_mmy (trained with disease-specific multiple myeloma dataset)
+    * scRNAseq_pdac (trained with disease-specific pancreatic cancer dataset)
+    * scRNAseq_generalized (trained with all scRNAseq datasets)
+    * scRNAseq_brca_panimmune (trained with specific immune cell state breast cancer dataset)
   * snRNAseq
-    * disease_specific_brca_snRNAseq
-    * disease_specific_gbm_snRNAseq
-    * disease_specific_ccrcc_snRNAseq
-    * general_snRNAseq
+    * snRNAseq_brca (trained with disease-specific breast cancer dataset)
+    * snRNAseq_ccrcc (trained with disease-specific kidney cancer dataset)
+    * snRNAseq_gbm (trained with disease-specific glioblastoma cancer dataset)
+    * snRNAseq_generalized (trained with all snRNAseq datasets)
   * snATACseq
-    * disease_specific_brca_snATACseq_gene_activity
-    * disease_specific_brca_snATACseq_motif
-    * disease_specific_ccrcc_snATACseq_gene_activity
-    * disease_specific_ccrcc_snATACseq_motif
-    * disease_specific_gbm_snATACseq_gene_activity
-    * disease_specific_gbm_snATACseq_motif
-    * general_snATACseq
+    * snATACseq_brca (trained with disease-specific breast cancer dataset, snATAC-seq data is represented as gene activity)
+    * snATACseq_ccrcc (trained with disease-specific kidney cancer dataset, snATAC-seq data is represented as gene activity)
+    * snATACseq_brca (trained with disease-specific glioblastoma cancer dataset, snATAC-seq data is represented as gene activity)
+    * snATACseq_generalized (trained with all snATACseq datasets)
 
 You can also create new modules with pollock (see training section below)
 
@@ -90,45 +66,19 @@ You can also create new modules with pollock (see training section below)
 
 #### Python API
 
-[module training tutorial on pbmc dataset](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_model_training.ipynb)
+[model training and prediction tutorial on pbmc dataset](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_model_training_and_prediction.ipynb)
 
-[prediction and feature explaination with an existing module](https://github.com/ding-lab/pollock/blob/master/examples/pbmc_module_prediction.ipynb)
+[prediction and feature score generation with pretrained model](https://github.com/ding-lab/pollock/blob/master/examples/pretrained_model_prediction_and_feature_importances.ipynb)
 
-[module examination](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb)
-
-#### R API
-
-There is an R library rpollock that comes installed with pollock that allows you to train a module and make predictions directly from R.
-
-Note: rpollock is dependent on the R library reticulate, which will sometimes prompt for a python install location. If this occurs, run the below code to find out the location of your python installation. It will output `<path/to/python/executable>`
-
-```bash
-which python3
-```
-
-When running R you will need to have this line at the very start of your script (before your library imports)
-```R
-reticulate::use_python("<path/to/python/executable>")
-```
-
-[example usage of rpollock on pbmc3k](https://github.com/ding-lab/pollock/blob/master/examples/rpollock_pbmc_prediction.Rmd)
-
-[This notebook](https://github.com/ding-lab/pollock/blob/master/examples/pollock_module_examination.ipynb) is a python script walking over the information that is contained in each module. Though it is in python, all this information is saved in a json file so everything done in that notebook can also be done in R.
 
 #### Command line tool
 ```bash
-usage: pollock [-h] [--module-filepath MODULE_FILEPATH]
-               [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
-               [--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH]
-               [--counts-10x-filepath COUNTS_10X_FILEPATH]
-               [--min-genes-per-cell MIN_GENES_PER_CELL] [--txt-output]
-               [--output-prefix OUTPUT_PREFIX]
-               [--explain-filepath EXPLAIN_FILEPATH]
-               [--background-filepath BACKGROUND_FILEPATH]
-               [--predicted-key PREDICTED_KEY]
-               [--background-sample-size BACKGROUND_SAMPLE_SIZE]
-               [--cell-type-key CELL_TYPE_KEY] [--alpha ALPHA]
-               [--epochs EPOCHS] [--latent-dim LATENT_DIM]
+usage: pollock [-h] [--module-filepath MODULE_FILEPATH] [--seurat-rds-filepath SEURAT_RDS_FILEPATH]
+               [--scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH] [--counts-10x-filepath COUNTS_10X_FILEPATH]
+               [--min-genes-per-cell MIN_GENES_PER_CELL] [--no-umap] [--txt-output] [--output-prefix OUTPUT_PREFIX]
+               [--background-sample-size BACKGROUND_SAMPLE_SIZE] [--cell-type-key CELL_TYPE_KEY] [--batch-size BATCH_SIZE] [--lr LR]
+               [--use-cuda] [--kl-scaler KL_SCALER] [--zinb-scaler ZINB_SCALER] [--clf-scaler CLF_SCALER] [--epochs EPOCHS]
+               [--latent-dim LATENT_DIM] [--enc-out-dim ENC_OUT_DIM] [--middle-dim MIDDLE_DIM] [--use-all-cells] [--val-ids VAL_IDS]
                [--n-per-cell-type N_PER_CELL_TYPE]
                mode source_type
 ```
@@ -146,14 +96,14 @@ source_type
 
   
 module_filepath
-  * If in prediction mode, this is the filepath to module to use for classification. Pretrained modules can be downloaded here https://zenodo.org/record/5155939#.YQqxbxNKi-Y
-  * If in training mode, this is the filepath where pollock will save the trained module.
-  * If in explain mode, this is the filepath to the module to use to explain the given pollock predictions.
+  * If in prediction mode, this is the filepath to model to use for classification. Pretrained models can be downloaded here https://zenodo.org/record/5895221 in pretrained_models.tar.gz
+  * If in training mode, this is the filepath where pollock will save the trained model.
+  * If in explain mode, this is the filepath to the model to use to explain the given pollock predictions.
 
 ###### mode specific arguments
 
 --seurat-rds-filepath SEURAT_RDS_FILEPATH
-  * A saved Seurat RDS object to use as input. Raw RNA-seq (i.e. not normalized) counts **must** be stored in @assays$RNA@counts. Note that this is where raw rna-seq counts will be stored by most Seurat single cell workflows by default.
+  * A saved Seurat RDS object to use as input. Raw RNA-seq (i.e. not normalized) counts **must** be stored in @assays$RNA@data.
   
 --scanpy-h5ad-filepath SCANPY_H5AD_FILEPATH
   * A saved .h5ad file to use as input. scanpy expression matrix (.X attribute in the anndata object) must be raw expression counts (i.e. not normalized)
@@ -161,30 +111,59 @@ module_filepath
 --counts-10x-filepath COUNTS_10X_FILEPATH
   * Can only be used with predict mode. Results of 10X cellranger run to be used for classification. There are two options for inputs: 1) the mtx count directory (typically at outs/raw_feature_bc_matrix), and 2) the .h5 file (typically at outs/raw_feature_bc_matrix.h5).
 
+--min-genes-per-cell-type MIN_GENES_PER_CELL_TYPE
+  * The minimun number of genes expressed in a cell in order for it to be classified. Only used in 10x mode. Default value is 10.
+
 ###### specific to train mode
 --cell-type-key CELL_TYPE_KEY
-  * The key to use for training the pollock module. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type label. The number of lines must be equal to the number of cells in the input object. The cell types must also be in the same order as the cells in the input object. By default if the input is a Seurat object pollock will use cell type labels in @active.ident, or if the input is a scanpy anndata object pollock will use the label in .obs["leiden"].
+  * The key to use for training the pollock module. The key must be a sring representing a column in the metadata of the input seurat object or .obs attribute of the scanpy anndata object.')
   
---alpha ALPHA
-  * This parameter controls how regularized the VAE is. .0001 is the default. If you increase alpha the cell embeddings are typically more noisy, but also more generalizable. If you decrease alpha the cell embeddings are typically less noisy, but also less generalizable.
+--batch-size BATCH_SIZE
+  * Batch size used for training.
+
+--lr LR
+  * Max learning rate.
+
+--use-cuda USE_CUDA
+  * If present, gpu will be used for training or prediction.
+
+--kl-scaler KL_SCALER
+  * This parameter controls how regularized the VAE is. 1e-3 is the default. If increased the cell embeddings are typically more noisy, but typically moregeneralizable. If decreased the cell embeddings are typically less noisy, but typically less generalizable'
+
+--zinb-scaler ZINB_SCALER
+  * Controls how much weight to give VAE reconstruction loss.
+
+--clf-scaler CLF_SCALER
+  * Controls how much weight to give classification loss.
 
 --epochs EPOCHS
   * Number of epochs to train the neural net for. Default is 20.
 
 --latent-dim LATENT_DIM
-  * Size of hidden layer in the B-VAE. Default is 25.
-  
+  * Size of hidden layer in the VAE. Default is 64.
+
+--encoder-out-dim ENCODER_OUT_DIM
+  * Size of layer before latent. Default is 128.
+
+--middle-dim MIDDLE_DIM
+  * Size of intermediate linear layers. Default is 512.
+
+--use-all-cells USE_ALL_CELLS
+  * Use all inputs for training. Will override --val-ids and --n-per-cell-type
+
+--val-ids VAL_IDS
+  * If present, argument will override --n-per-cell-type. Specifies which cell ids should be used as validation, the remaining cell ids will be used for training. The filepath must be a text file with one cell ID per line.
+
 --n-per-cell-type N_PER_CELL_TYPE
-  * The number of cells per cell type that should be included in the training dataset. Typically this number will be somewhere between 500-2000. The default is 500. If you have a particular cell type in your dataset that has a low cell count it is usually a good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type should be no greater than the minimum cell type count * 10.
+  * Is used by default. Determines how to split input data into validation and training datasets. The input data will be split into training and validation datasets based on the following methadology. N_PER_CELL_TYPE cells will be partitioned into training dataset for each cell type. If less than N_PER_CELL_TYPE cells exist for a cell type than cells are oversampled to balance the training dataset. Default is 500.
 
+###### specific to predict mode
 
-###### optional arguments specific to predict mode
-
---min-genes-per-cell MIN_GENES_PER_CELL
-  * The minimun number of genes expressed in a cell in order for it to be classified. Only used in 10x mode
+--no-umap NO_UMAP
+  * By default VAE embeddings are transformed via UMAP into 2D space and incorporated into predicted object. However, this step can take additional time. To prevent include the --no-umap flag. This will speed up prediction time.')
   
 --txt-output TXT_OUTPUT
-  * If included output will be written to a tab-seperated .txt file. Otherwise output will be saved in the metadata of the input seurat object (.rds) or scanpy anndata object (.h5ad)
+  * If included output will be written to a tab-seperated .txt file. Otherwise output will be saved in the metadata of the input seurat object (.rds) or scanpy anndata object (.h5ad) depending on the input data type.
   
 --output-prefix OUTPUT_PREFIX
   * Filepath prefix to write output file. Extension will be dependent on the inclusion of --output-txt argument. By default the extension will be the same as the input object type. Default value is "output"
@@ -200,15 +179,15 @@ module_filepath
 
 ###### optional arguments specific to explain mode
 
---predicted-key PREDICTED_KEY
-  * The key holding pollock predictiosn to use for explaining the given input data. The key can be one of the following: 1) A string representing a column in the metadata of the input seurat object or the .obs attribute of the scanpy anndata object, or 2) filepath to a .txt file where each line is a cell type
+--background-sample-size BACKGROUND_SAMPLE_SIZE
+  * Number of cells to sample as background samples. The default of 100 cells is sufficient in most use cases.
 
-  
+
 #### example basic usage
 
 ##### predict mode
 
-An example of cell type prediction on a Seurat .RDS object
+An example of cell type prediction on a Seurat .RDS object and save results to output.rds
 ```bash
 pollock predict from_seurat --module-filepath <path_to_module_directory> --seurat-rds-filepath <filepath_to_RDS_object> --output-prefix output
 ```
@@ -230,40 +209,29 @@ pollock predict from_10x --module-filepath <path_to_module_directory> --counts-1
 
 ##### train mode
 
-An example of training a model on a Seurat .RDS object that has cell type labels in @active.idents slot. Note this is where cell type labels are typically stored in Seurat workflows.
+An example of training a model on a Seurat .RDS object that has cell type labels stored as 'cell_type' in the object metadata.
 ```bash
-pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> 
-```
-
-An example of training a model on a Seurat .RDS object that has cell type labels stored in a metadata column named "my_special_cell_types".
-```bash
-pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key my_special_cell_types
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key cell_type
 
 ```
 
-An example of training a model on a Seurat .RDS object where cell type labels are in a file.
+An example of training a model on a Seurat .RDS object with some custom model hyperparamters
 ```bash
-pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object> --cell-type-key <filepath_to_cell_labels>
+pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object>  --epochs 10 --n-per-cell-type 500
 ```
 
-
-An example of training a model on a Seurat .RDS object with custom model hyperparamters
+An example of training a model on a scanpy .h5ad object that has cell type labels stored in a column in .obs named "cell_type".
 ```bash
-pollock train from_seurat --module-filepath <path_to_write_output_module> --seurat-rds-filepath <filepath_to_RDS_object>  --alpha .0001 --epochs 20 --latent-dim 25 --n-per-cell-type 500
-```
-
-An example of training a model on a scanpy .h5ad object that has cell type labels stored in a column in .obs named "my_special_cell_types".
-```bash
-pollock train from_scanpy --module-filepath <path_to_write_output_module> --scanpy-h5ad-filepath <filepath_to_h5ad_object> --cell-type-key my_special_cell_types
+pollock train from_scanpy --module-filepath <path_to_write_output_module> --scanpy-h5ad-filepath <filepath_to_h5ad_object> --cell-type-key cell_type
 ```
 
 ##### explain mode
 
-Note: explain mode can have excessive runtimes for large numbers of cells, so we recommend downsampling the number of cells in the inputs to <1k cells for faster runtimes.
+Note: explain mode can have excessive runtimes for very large numbers of cells, so we recommend downsampling the number of cells in the inputs for faster runtimes.
 
-The explain object contains cells to be explained, the background arguments contains cells to be sampled as background.
+The explain object contains cells to be explained, the background arguments contains cells to be used as background.
 
-An example of explaining a model for a Seurat .RDS object that has cell type labels in @active.idents slot. Note this is where cell type labels are typically stored in Seurat workflows.
+An example of explaining a model for a Seurat .RDS object that has cell type labels in a metadata column named 'cell_type'
 ```bash
 pollock explain from_seurat --explain-filepath <path_to_explain_seurat_object> --background-filepath <path_to_background_seurat_object> --module-filepath <path_to_pollock_module> --output-prefix <path_to_write_output>
 ```
@@ -276,7 +244,7 @@ pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --backgrou
 #### Docker
 Docker images are available for Pollock. To pull the latest Pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock-cpu:0.1.2
+docker pull estorrs/pollock:0.2.1
 ```
 
 ###### example basic usage of comand line tool within a docker container
@@ -285,8 +253,10 @@ When using docker, the input and ouput file directories need to be mounted as a 
 
 Below is an example of predicting cell types from within a docker container. Sections outlined by <> need to be replaced. Note file and directory paths in the -v flag must be absolute. For more examples of how the pollock command line tool is used see the above usage examples.
 
+Note that if predicting from Seurat RDS object raw, un-normalized counts must be stored in the RNA assay, i.e. the expression data in the object should **not** be normalized.
+
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock-cpu:0.1.2 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock:0.2.1 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
 ```
 
 ### Testing

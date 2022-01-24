@@ -36,12 +36,6 @@ parser.add_argument('--scanpy-h5ad-filepath', type=str,
         help='A saved .h5ad file to use for classification. scanpy \
 data matrix must be raw expression counts (i.e. not normalized)')
 
-
-########################
-## optional arguments ##
-########################
-
-## optional arguments for prediction mode
 ## 10x specific parameters
 parser.add_argument('--counts-10x-filepath', type=str,
         help='Results of 10X cellranger run to be used for classification. \
@@ -51,6 +45,13 @@ outs/raw_feature_bc_matrix.h5).')
 parser.add_argument('--min-genes-per-cell', type=int, default=10,
         help='The minimun number of genes expressed in a cell in order for it \
 to be classified. Only used in 10x mode. Default value is 10.')
+
+
+########################
+## optional arguments ##
+########################
+
+## optional arguments for prediction mode
 
 # other
 parser.add_argument('--no-umap', action='store_true',
@@ -70,8 +71,7 @@ Default value is "output"')
 # optional arguments for explain mode
 parser.add_argument('--background-sample-size', type=int, default=100,
     help='Number of cells to sample as background samples. \
-The default of 100 cells is sufficient in most use cases. A larger sample size results in longer \
-run times, but increased accuracy.')
+The default of 100 cells is sufficient in most use cases.')
 
 # optional arguments for training mode
 
@@ -107,7 +107,7 @@ parser.add_argument('--use-all-cells', action='store_true',
 parser.add_argument('--val-ids', type=str,
         help='If present, argument will override --n-per-cell-type. Specifies which cell ids should be used as validation, the remaining cell ids will be used for training. The filepath must be a text file with one cell ID per line.')
 parser.add_argument('--n-per-cell-type', type=int, default=500,
-        help='Determines how to split input data into validation and training datasets. The input data will be split into training and validation datasets based on the following methadology. Typically this number will be somewhere between 500-2000. Default is 500. If you have a particular cell type in your dataset that has a low cell count it is usually a good idea not to increase n_per_cell_type too much. A good rule of thumb is that n_per_cell_type should be no greater than the minimum cell type count * 10.')
+        help='Is used by default. Determines how to split input data into validation and training datasets. The input data will be split into training and validation datasets based on the following methadology. N_PER_CELL_TYPE cells will be partitioned into training dataset for each cell type. If less than N_PER_CELL_TYPE cells exist for a cell type than cells are oversampled to balance the training dataset. Default is 500.')
 
 
 args = parser.parse_args()
@@ -203,6 +203,10 @@ def run_predict_cell_types(adata):
         df = get_probability_df(a, model)
         df.to_csv(output_fp, sep='\t')
     elif args.source_type == 'from_seurat':
+        # add umap to metadata if it is there
+        if 'X_umap' in a.obsm:
+            a.obs['UMAP1'] = a.obsm['X_umap'][:, 0]
+            a.obs['UMAP2'] = a.obsm['X_umap'][:, 1]
         utils.save_rds(a, args.output_prefix + '.rds')
     elif args.source_type == 'from_scanpy':
         a.write_h5ad(args.output_prefix + '.h5ad')

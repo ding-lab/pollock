@@ -80,10 +80,10 @@ def explain_predictions(model, adata, adata_background, label_key='cell_type',
 
         a = explain_adata(model, f, adata_background, target=label, device=device)
 
-        if absolute:
-            a = a.abs()
-
         if a is not None:
+            if absolute:
+                a = a.abs()
+
             a[label_key] = label
 
             if attbs is None:

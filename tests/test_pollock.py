@@ -6,13 +6,11 @@ import pandas as pd
 
 MODULE_FILEPATH = './test_module'
 SEURAT_RDS_FILEPATH = './data/dummy.rds'
-SEURAT_SMALL_RDS_FILEPATH = './data/dummy_small.rds'
 SCANPY_H5AD_FILEPATH = './data/dummy.h5ad'
-SCANPY_SMALL_H5AD_FILEPATH = './data/dummy_small.h5ad'
 N_PER_CELL_TYPE = '50'
 OUTPUT_PREFIX = './output'
 
-EXPECTED_LENGTH = 1000
+EXPECTED_LENGTH = 997
 
 
 def clean_up_test_files():
@@ -61,7 +59,7 @@ def test_predict_from_seurat_with_txt_output():
 
 def test_explain_from_seurat():
     command = ('pollock', 'explain', 'from_seurat',
-            '--seurat-rds-filepath', SEURAT_SMALL_RDS_FILEPATH,
+            '--seurat-rds-filepath', SEURAT_RDS_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
             '--cell-type-key', 'cell_type',
             '--output-prefix', OUTPUT_PREFIX,
@@ -112,7 +110,7 @@ def test_predict_from_scanpy_with_txt_output():
 
 def test_explain_from_scanpy():
     command = ('pollock', 'explain', 'from_scanpy',
-            '--scanpy-h5ad-filepath', SCANPY_SMALL_H5AD_FILEPATH,
+            '--scanpy-h5ad-filepath', SCANPY_H5AD_FILEPATH,
             '--module-filepath', MODULE_FILEPATH,
             '--output-prefix', OUTPUT_PREFIX,
             '--cell-type-key', 'cell_type',

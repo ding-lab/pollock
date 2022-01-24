@@ -1,6 +1,7 @@
 import argparse
 import logging
 
+import anndata
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -135,6 +136,15 @@ def load_seurat():
     adata = utils.convert_rds(args.seurat_rds_filepath)
     adata.var_names_make_unique()
 
+    if adata.raw is not None:
+        new = anndata.AnnData(X=adata.raw.X, obs=adata.obs)
+        new.var.index = adata.raw.var.iloc[:, 0].to_list()
+        new.var.index = new.var.index.astype(str)
+        new.obs.index = new.obs.index.astype(str)
+        new.obs_names_make_unique()
+        new.var_names_make_unique()
+        adata = new
+
     return adata
 
 def load_scanpy():
@@ -203,10 +213,6 @@ def run_predict_cell_types(adata):
         df = get_probability_df(a, model)
         df.to_csv(output_fp, sep='\t')
     elif args.source_type == 'from_seurat':
-        # add umap to metadata if it is there
-        if 'X_umap' in a.obsm:
-            a.obs['UMAP1'] = a.obsm['X_umap'][:, 0]
-            a.obs['UMAP2'] = a.obsm['X_umap'][:, 1]
         utils.save_rds(a, args.output_prefix + '.rds')
     elif args.source_type == 'from_scanpy':
         a.write_h5ad(args.output_prefix + '.h5ad')

@@ -55,6 +55,8 @@ def explain_adata(model, adata, baseline_adata, target, device='cpu',
     else:
         attrs = {}
         for i in range(len(model.classes)):
+            ct = model.classes[i]
+            logging.info(f'calculating feature importances for {ct}')
             attr, _ = dls.attribute(
                 inputs, baseline, target=i, return_convergence_delta=True)
             attrs[model.classes[i]] = pd.DataFrame(
@@ -65,10 +67,11 @@ def explain_adata(model, adata, baseline_adata, target, device='cpu',
 
 
 def explain_predictions(model, adata, adata_background, label_key='cell_type',
-                        n_sample=None, device='cpu'):
+                        n_sample=None, device='cpu', absolute=True):
     attbs = None
     labels = sorted(set(adata.obs[label_key]))
     for label in labels:
+        logging.info(f'calculating feature scores for {label}')
         f = adata[adata.obs[label_key]==label]
         if n_sample is not None:
             f = f[np.random.choice(
@@ -76,6 +79,10 @@ def explain_predictions(model, adata, adata_background, label_key='cell_type',
                       replace=False)]
 
         a = explain_adata(model, f, adata_background, target=label, device=device)
+
+        if absolute:
+            a = a.abs()
+
         if a is not None:
             a[label_key] = label
 

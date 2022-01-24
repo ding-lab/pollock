@@ -69,11 +69,10 @@ def cap_list(ls, n=100, split=.8, oversample=True):
     pivot = int(len(ls) * split)
     np.random.shuffle(ls)
 
-    if not oversample:
+    if not oversample or n < pivot:
         return ls[:min(pivot, n)]
 
-    return np.random.choice(ls, size=n)
-
+    return np.random.choice(ls[:min(pivot, n)], size=n)
 
 
 def get_splits(adata, cell_type_key, n_per_cell_type,
@@ -95,8 +94,6 @@ def get_splits(adata, cell_type_key, n_per_cell_type,
     train_ids = np.asarray([x for ls in cell_type_to_idxs.values() for x in ls])
     pool = set(train_ids)
     val_ids = np.asarray([x for x in adata.obs.index.to_list() if x not in pool])
-##     train_idxs = np.arange(adata.shape[0])[np.isin(np.asarray(adata.obs.index), train_ids)]
-##     val_idxs = np.delete(np.arange(adata.shape[0]), train_idxs)
 
     return train_ids, val_ids
 

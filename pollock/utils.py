@@ -203,7 +203,10 @@ def load_model(directory):
         middle_dim=summary['middle_dim'], kl_scaler=summary['kl_scaler'],
         clf_scaler=summary['clf_scaler'], zinb_scaler=summary['zinb_scaler'])
 
-    model.load_state_dict(torch.load(model_fp))
+    if not torch.cuda.is_available():
+        model.load_state_dict(torch.load(model_fp, map_location=torch.device('cpu')))
+    else:
+        model.load_state_dict(torch.load(model_fp))
 
     return model
 

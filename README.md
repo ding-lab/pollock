@@ -4,6 +4,8 @@
 
 Pollock is a deep learning method for single cell classification.
 
+If you use Pollock in your publication, please consider citing the following [paper](https://academic.oup.com/bioinformaticsadvances/article/2/1/vbac028/6585383)
+
 ## Installation
 
 #### To install

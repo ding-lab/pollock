@@ -143,8 +143,8 @@ class PollockDataset(Dataset):
 
         sf = self.adata.obs['size_factors'][idx]
 
-        label = self.labels[idx] if self.labels is not None else None
-        y = self.cell_types.index(label) if label is not None else None
+        label = self.labels[idx] if self.labels is not None else 'unknown'
+        y = self.cell_types.index(label) if label is not 'unknown' else 0
 
         return {
             'x': x,
@@ -186,7 +186,7 @@ def get_prediction_dataloader(adata, var_order, batch_size=64):
 
     adata = normalize(adata, var_order=var_order)
 
-    ds = PollockDataset(adata)
+    ds = PollockDataset(adata, label_col=None)
 
     dl = DataLoader(ds, batch_size=batch_size, shuffle=False)
 

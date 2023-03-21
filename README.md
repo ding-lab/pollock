@@ -20,12 +20,15 @@ First, download the Pollock repo
 git clone https://github.com/ding-lab/pollock.git
 ```
 
-Then, create a conda environment from the environmental file within the Pollock repository and activate the conda environment.
+Then, create a conda environment and install pollock using the commands below.
 
 ```bash
-cd pollock
-conda env create --file env.yaml
+conda create -n pollock -c pytorch -c conda-forge -y pytorch torchvision torchaudio cpuonly captum scanpy umap-learn r-base
 conda activate pollock
+RUN Rscript -e 'install.packages(c("seurat", "remotes"), repos="https://cloud.r-project.org")'
+RUN Rscript -e 'remotes::install_github("mojaveazure/seurat-disk")'
+
+cd pollock
 pip install .
 ```
 
@@ -246,7 +249,7 @@ pollock explain from_scanpy --explain-filepath <path_to_explain_h5ad> --backgrou
 #### Docker
 Docker images are available for Pollock. To pull the latest Pollock docker image run the following:
 ```bash
-docker pull estorrs/pollock:0.2.1
+docker pull estorrs/pollock:0.2.2
 ```
 
 ###### example basic usage of comand line tool within a docker container
@@ -257,7 +260,7 @@ Below is an example of predicting cell types from within a docker container. Sec
 
 
 ```bash
-docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock:0.2.1 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
+docker run -v </path/to/directory/with/seurat/rds>:/inputs -v </path/to/output/directory>:/outputs -v </path/to/modules/directory/>:/modules -t estorrs/pollock:0.2.2 pollock predict from_seurat --module-filepath /modules/<module_name> --seurat-rds-filepath /inputs/<name_of_seurat_rds_file> --output-prefix /outputs/output
 ```
 
 ### Testing

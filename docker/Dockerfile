@@ -7,8 +7,7 @@ RUN bash ~/miniconda.sh -b -p /miniconda
 ENV PATH="/miniconda/bin:$PATH"
 
 RUN git clone https://github.com/ding-lab/pollock.git 
-RUN conda env create --file pollock/env.yaml 
-
+RUN conda env create -n pollock pytorch torchvision torchaudio cpuonly captum scanpy umap-learn -c pytorch -c conda-forge
 ENV PATH="/miniconda/envs/pollock/bin:$PATH"
 
 RUN pip install /pollock

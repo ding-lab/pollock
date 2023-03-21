@@ -7,6 +7,7 @@ rds_fp = args[1]
 h5_fp = args[2]
 
 obj = readRDS(rds_fp)
+DefaultAssay(object = obj) <- "RNA"
 obj <- DietSeurat(obj, assay = 'RNA')
 
 for (col in colnames(obj@meta.data)) {
